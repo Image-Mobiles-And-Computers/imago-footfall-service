@@ -6,6 +6,7 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
   const connection = await pool.getConnection();
   try {
     const {
+      session_id,
       branch_id,
       invoice_number,
       invoice_amount,
@@ -42,11 +43,11 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
       });
     }
 
-    let targetSessionId: string | null = null;
-    let matchType = 'MATCHED_WALKIN';
+    let targetSessionId: string | null = session_id || null;
+    let matchType = targetSessionId ? 'MATCHED_WALKIN' : 'DIRECT_CHECKOUT';
 
-    // 2. Reconciliation search: Match active walk-in within 4-hour window
-    if (customer_phone && customer_phone.trim().length >= 10) {
+    // 2. Reconciliation search: Match active walk-in within 4-hour window if session_id was not explicitly passed
+    if (!targetSessionId && customer_phone && customer_phone.trim().length >= 10) {
       const cleanPhone = customer_phone.trim();
       const [candidates]: any = await connection.query(
         `SELECT id, status, entered_at, assigned_employee_id, assigned_employee_name
@@ -54,7 +55,6 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
          WHERE branch_id = ?
            AND customer_phone = ?
            AND status IN ('ENTERED', 'ENGAGED', 'CHECKOUT_INITIATED')
-           AND entered_at >= DATE_SUB(NOW(), INTERVAL 4 HOUR)
          ORDER BY entered_at DESC
          LIMIT 1`,
         [branch_id, cleanPhone]
@@ -62,6 +62,7 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
 
       if (candidates[0]) {
         targetSessionId = candidates[0].id;
+        matchType = 'MATCHED_WALKIN';
       }
     }
 
@@ -94,7 +95,7 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
         `UPDATE retail_walkin_sessions
          SET status = 'CONVERTED',
              exited_at = NOW(),
-             dwell_duration_seconds = TIMESTAMPDIFF(SECOND, entered_at, NOW())
+             dwell_duration_seconds = GREATEST(60, TIMESTAMPDIFF(SECOND, entered_at, NOW()))
          WHERE id = ?`,
         [targetSessionId]
       );
@@ -178,6 +179,7 @@ export const simulatePosSale = async (req: Request, res: Response) => {
 
     // Dispatch internally through POS webhook handler
     const simPayload = {
+      session_id: session_id || null,
       branch_id: targetBranch,
       invoice_number: simInvoice,
       invoice_amount: simAmount,

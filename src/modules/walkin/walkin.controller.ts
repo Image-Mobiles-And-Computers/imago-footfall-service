@@ -324,3 +324,100 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
     connection.release();
   }
 };
+
+export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
+  try {
+    const { branch_id, status, search, limit = '100', offset = '0' } = req.query;
+    let targetBranchId = branch_id as string | undefined;
+
+    let query = `
+      SELECT s.*,
+             TIMESTAMPDIFF(MINUTE, s.entered_at, COALESCE(s.exited_at, NOW())) as dwell_minutes,
+             TIMESTAMPDIFF(SECOND, s.entered_at, COALESCE(s.exited_at, NOW())) as dwell_seconds,
+             c.invoice_number,
+             c.invoice_amount,
+             c.payment_method,
+             c.sold_skus,
+             t.category as lost_reason_category,
+             t.label as lost_reason_label,
+             lo.requested_sku as intent_sku_name,
+             lo.competitor_price,
+             lo.notes as lost_notes
+      FROM retail_walkin_sessions s
+      LEFT JOIN retail_conversions c ON s.id = c.session_id
+      LEFT JOIN retail_lost_opportunities lo ON s.id = lo.session_id
+      LEFT JOIN retail_reason_taxonomies t ON lo.taxonomy_id = t.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (targetBranchId && targetBranchId !== 'ALL') {
+      query += ' AND s.branch_id = ?';
+      params.push(targetBranchId);
+    }
+
+    if (status && status !== 'ALL') {
+      query += ' AND s.status = ?';
+      params.push(status);
+    }
+
+    if (search && (search as string).trim()) {
+      const q = `%${(search as string).trim()}%`;
+      query += ` AND (
+        s.session_number LIKE ? OR 
+        s.customer_name LIKE ? OR 
+        s.customer_phone LIKE ? OR 
+        s.primary_category_name LIKE ? OR 
+        s.assigned_employee_name LIKE ? OR
+        lo.requested_sku LIKE ?
+      )`;
+      params.push(q, q, q, q, q, q);
+    }
+
+    query += ' ORDER BY s.entered_at DESC LIMIT ? OFFSET ?';
+    params.push(Number(limit), Number(offset));
+
+    const [rows] = await pool.query(query, params);
+
+    // Count query
+    let countQuery = `
+      SELECT COUNT(*) as total
+      FROM retail_walkin_sessions s
+      LEFT JOIN retail_lost_opportunities lo ON s.id = lo.session_id
+      WHERE 1=1
+    `;
+    const countParams: any[] = [];
+    if (targetBranchId && targetBranchId !== 'ALL') {
+      countQuery += ' AND s.branch_id = ?';
+      countParams.push(targetBranchId);
+    }
+    if (status && status !== 'ALL') {
+      countQuery += ' AND s.status = ?';
+      countParams.push(status);
+    }
+    if (search && (search as string).trim()) {
+      const q = `%${(search as string).trim()}%`;
+      countQuery += ` AND (
+        s.session_number LIKE ? OR 
+        s.customer_name LIKE ? OR 
+        s.customer_phone LIKE ? OR 
+        s.primary_category_name LIKE ? OR 
+        s.assigned_employee_name LIKE ? OR
+        lo.requested_sku LIKE ?
+      )`;
+      countParams.push(q, q, q, q, q, q);
+    }
+
+    const [countRows]: any = await pool.query(countQuery, countParams);
+
+    res.json({
+      success: true,
+      data: rows,
+      total: countRows[0]?.total || 0,
+      limit: Number(limit),
+      offset: Number(offset)
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch walk-ins', error: error.message });
+  }
+};

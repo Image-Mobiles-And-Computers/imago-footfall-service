@@ -4,7 +4,8 @@ import {
   getCategories, createCategory, updateCategory, deleteCategory,
   getTaxonomies, createTaxonomy, updateTaxonomy, deleteTaxonomy,
   getProducts, getProductById, createProduct, updateProduct, deleteProduct,
-  resetMasterCatalog
+  resetMasterCatalog,
+  getAddons, getAddonById, createAddon, updateAddon, toggleAddonStatus, deleteAddon
 } from './catalog.controller';
 import { authenticateJwt, requirePermission } from '../../middleware/auth';
 
@@ -17,6 +18,8 @@ router.get('/categories', getCategories);
 router.get('/taxonomies', getTaxonomies);
 router.get('/products', getProducts);
 router.get('/products/:id', getProductById);
+router.get('/addons', getAddons);
+router.get('/addons/:id', getAddonById);
 
 // Protected Brand Master CRUD
 router.post('/brands', authenticateJwt, requirePermission('catalog:manage'), createBrand);
@@ -38,7 +41,14 @@ router.post('/products', authenticateJwt, requirePermission('catalog:manage'), c
 router.put('/products/:id', authenticateJwt, requirePermission('catalog:manage'), updateProduct);
 router.delete('/products/:id', authenticateJwt, requirePermission('catalog:manage'), deleteProduct);
 
+// Protected Add-On Master CRUD
+router.post('/addons', authenticateJwt, requirePermission('catalog:manage'), createAddon);
+router.put('/addons/:id', authenticateJwt, requirePermission('catalog:manage'), updateAddon);
+router.patch('/addons/:id/toggle', authenticateJwt, requirePermission('catalog:manage'), toggleAddonStatus);
+router.delete('/addons/:id', authenticateJwt, requirePermission('catalog:manage'), deleteAddon);
+
 // Super Admin Reset / Seed Re-sync
 router.post('/admin/reset-taxonomies', authenticateJwt, requirePermission('catalog:manage'), resetMasterCatalog);
 
 export default router;
+

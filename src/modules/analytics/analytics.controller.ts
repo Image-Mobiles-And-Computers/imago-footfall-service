@@ -232,13 +232,12 @@ export const getSkuLossDetails = async (req: AuthRequest, res: Response) => {
          TIMESTAMPDIFF(MINUTE, s.entered_at, s.exited_at) as dwell_minutes,
          b.name as branch_name,
          b.code as branch_code,
-         u.full_name as logged_by_staff_name
+         COALESCE(l.logged_by_employee_name, s.assigned_employee_name, 'Showroom Associate') as logged_by_staff_name
        FROM retail_lost_opportunities l
        LEFT JOIN retail_product_master p ON l.product_id = p.id
        JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
        LEFT JOIN retail_walkin_sessions s ON l.session_id = s.id
        LEFT JOIN imago_org_db.branches b ON s.branch_id = b.id
-       LEFT JOIN imago_iam_db.users u ON l.created_by_user_id = u.id
        WHERE (p.model_name = ? OR l.requested_sku = ?)
          AND l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
        ORDER BY l.logged_at DESC`,

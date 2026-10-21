@@ -480,3 +480,152 @@ export const resetMasterCatalog = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'Failed to reset master catalog', error: error.message });
   }
 };
+
+// ==============================================================================
+// 6. ADD-ON & WARRANTY SERVICES MASTER CRUD
+// ==============================================================================
+
+export const getAddons = async (req: Request, res: Response) => {
+  try {
+    const includeInactive = req.query.include_inactive === 'true';
+    const categoryFocus = req.query.category_focus as string;
+
+    let query = 'SELECT * FROM retail_addon_services';
+    const params: any[] = [];
+    const conditions: string[] = [];
+
+    if (!includeInactive) {
+      conditions.push('is_active = TRUE');
+    }
+
+    if (categoryFocus && categoryFocus !== 'ALL') {
+      conditions.push('(category_focus = ? OR category_focus = "ALL")');
+      params.push(categoryFocus);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
+    }
+
+    query += ' ORDER BY display_order ASC, name ASC';
+
+    const [rows]: any = await pool.query(query, params);
+    res.json({ success: true, data: rows });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch add-on plans', error: error.message });
+  }
+};
+
+export const getAddonById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const [rows]: any = await pool.query('SELECT * FROM retail_addon_services WHERE id = ?', [id]);
+    if (!rows[0]) {
+      return res.status(404).json({ success: false, message: 'Add-on plan not found' });
+    }
+    res.json({ success: true, data: rows[0] });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch add-on plan', error: error.message });
+  }
+};
+
+export const createAddon = async (req: Request, res: Response) => {
+  try {
+    const { code, name, category_focus, description, price, display_order, is_active } = req.body;
+
+    if (!code || !name) {
+      return res.status(400).json({ success: false, message: 'Code and Name are required' });
+    }
+
+    const id = uuidv4();
+    await pool.query(
+      `INSERT INTO retail_addon_services (id, code, name, category_focus, description, price, is_active, display_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        code.trim().toUpperCase(),
+        name.trim(),
+        category_focus || 'ALL',
+        description || null,
+        price !== undefined ? parseFloat(price) : 0.00,
+        is_active !== undefined ? Boolean(is_active) : true,
+        display_order !== undefined ? parseInt(display_order, 10) : 0
+      ]
+    );
+
+    const [created]: any = await pool.query('SELECT * FROM retail_addon_services WHERE id = ?', [id]);
+    res.status(201).json({ success: true, message: 'Add-on plan created successfully', data: created[0] });
+  } catch (error: any) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, message: 'An add-on plan with this code already exists' });
+    }
+    res.status(500).json({ success: false, message: 'Failed to create add-on plan', error: error.message });
+  }
+};
+
+export const updateAddon = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { code, name, category_focus, description, price, is_active, display_order } = req.body;
+
+    const [existing]: any = await pool.query('SELECT * FROM retail_addon_services WHERE id = ?', [id]);
+    if (!existing[0]) {
+      return res.status(404).json({ success: false, message: 'Add-on plan not found' });
+    }
+
+    await pool.query(
+      `UPDATE retail_addon_services
+       SET code = COALESCE(?, code),
+           name = COALESCE(?, name),
+           category_focus = COALESCE(?, category_focus),
+           description = COALESCE(?, description),
+           price = COALESCE(?, price),
+           is_active = COALESCE(?, is_active),
+           display_order = COALESCE(?, display_order)
+       WHERE id = ?`,
+      [
+        code ? code.trim().toUpperCase() : null,
+        name ? name.trim() : null,
+        category_focus !== undefined ? category_focus : null,
+        description !== undefined ? description : null,
+        price !== undefined ? parseFloat(price) : null,
+        is_active !== undefined ? Boolean(is_active) : null,
+        display_order !== undefined ? parseInt(display_order, 10) : null,
+        id
+      ]
+    );
+
+    const [updated]: any = await pool.query('SELECT * FROM retail_addon_services WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Add-on plan updated successfully', data: updated[0] });
+  } catch (error: any) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, message: 'An add-on plan with this code already exists' });
+    }
+    res.status(500).json({ success: false, message: 'Failed to update add-on plan', error: error.message });
+  }
+};
+
+export const toggleAddonStatus = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE retail_addon_services SET is_active = NOT is_active WHERE id = ?', [id]);
+    const [updated]: any = await pool.query('SELECT * FROM retail_addon_services WHERE id = ?', [id]);
+    if (!updated[0]) {
+      return res.status(404).json({ success: false, message: 'Add-on plan not found' });
+    }
+    res.json({ success: true, message: 'Status toggled successfully', data: updated[0] });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to toggle status', error: error.message });
+  }
+};
+
+export const deleteAddon = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM retail_addon_services WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Add-on plan deleted permanently' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to delete add-on plan', error: error.message });
+  }
+};
+
