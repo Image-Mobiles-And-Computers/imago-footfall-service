@@ -161,12 +161,16 @@ export const simulatePosSale = async (req: Request, res: Response) => {
 
     if (session_id) {
       const [rows]: any = await pool.query('SELECT * FROM retail_walkin_sessions WHERE id = ?', [session_id]);
-      if (rows[0]) {
-        targetPhone = rows[0].customer_phone;
-        targetBranch = rows[0].branch_id;
-        targetStaffId = rows[0].assigned_employee_id;
-        targetStaffName = rows[0].assigned_employee_name;
+      if (!rows[0]) {
+        return res.status(404).json({ success: false, message: 'Walk-in session not found' });
       }
+      if (rows[0].status === 'CONVERTED') {
+        return res.status(400).json({ success: false, message: 'This customer walk-in session has already been converted into a POS sale.' });
+      }
+      targetPhone = rows[0].customer_phone;
+      targetBranch = rows[0].branch_id;
+      targetStaffId = rows[0].assigned_employee_id;
+      targetStaffName = rows[0].assigned_employee_name;
     }
 
     const simInvoice = `INV-${Date.now().toString().slice(-6)}`;
