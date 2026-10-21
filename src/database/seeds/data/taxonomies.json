@@ -1,0 +1,155 @@
+[
+  {
+    "category": "PRICE_COMMERCIAL",
+    "code": "PRICE_ONLINE_COMPETITOR",
+    "label": "Competitor Online Deal (Amazon / Flipkart)",
+    "requires_competitor_info": true,
+    "requires_sku_info": false,
+    "requires_price_diff": true,
+    "display_order": 10
+  },
+  {
+    "category": "PRICE_COMMERCIAL",
+    "code": "PRICE_LOCAL_COMPETITOR",
+    "label": "Competitor Local Store Deal (Reliance / Croma)",
+    "requires_competitor_info": true,
+    "requires_sku_info": false,
+    "requires_price_diff": true,
+    "display_order": 20
+  },
+  {
+    "category": "PRICE_COMMERCIAL",
+    "code": "PRICE_OVER_BUDGET",
+    "label": "Price Resistance (Customer budget exceeded)",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 30
+  },
+  {
+    "category": "PRICE_COMMERCIAL",
+    "code": "PRICE_LOW_EXCHANGE",
+    "label": "Exchange / Trade-In Value Unsatisfactory",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 40
+  },
+  {
+    "category": "PRICE_COMMERCIAL",
+    "code": "PRICE_EMI_REJECTED",
+    "label": "Financing / EMI Rejection or Unavailable",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 50
+  },
+  {
+    "category": "INVENTORY_STOCK",
+    "code": "STOCK_MODEL_UNAVAILABLE",
+    "label": "Out of Stock (Entire Model Unavailable)",
+    "requires_competitor_info": false,
+    "requires_sku_info": true,
+    "requires_price_diff": false,
+    "display_order": 60
+  },
+  {
+    "category": "INVENTORY_STOCK",
+    "code": "STOCK_COLOR_VARIANT",
+    "label": "Specific Color / Storage Variant Unavailable",
+    "requires_competitor_info": false,
+    "requires_sku_info": true,
+    "requires_price_diff": false,
+    "display_order": 70
+  },
+  {
+    "category": "INVENTORY_STOCK",
+    "code": "STOCK_ACCESSORY_MISSING",
+    "label": "Required Accessory Missing or Unbundled",
+    "requires_competitor_info": false,
+    "requires_sku_info": true,
+    "requires_price_diff": false,
+    "display_order": 80
+  },
+  {
+    "category": "INVENTORY_STOCK",
+    "code": "STOCK_LEAD_TIME_TOO_LONG",
+    "label": "Excessive Lead Time for Store Delivery",
+    "requires_competitor_info": false,
+    "requires_sku_info": true,
+    "requires_price_diff": false,
+    "display_order": 90
+  },
+  {
+    "category": "CUSTOMER_INTENT",
+    "code": "INTENT_WINDOW_SHOPPING",
+    "label": "Window Shopping / Casual Browsing",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 100
+  },
+  {
+    "category": "CUSTOMER_INTENT",
+    "code": "INTENT_MARKET_RESEARCH",
+    "label": "Pre-Purchase Market Research / Future Planning",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 110
+  },
+  {
+    "category": "CUSTOMER_INTENT",
+    "code": "INTENT_ACCOMPANYING",
+    "label": "Accompanying Family Member or Friend",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 120
+  },
+  {
+    "category": "CUSTOMER_INTENT",
+    "code": "INTENT_SERVICE_ONLY",
+    "label": "Service, Repair, or Warranty Inquiry Only",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 130
+  },
+  {
+    "category": "STORE_SERVICE",
+    "code": "STORE_STAFF_BUSY",
+    "label": "Sales Associates Busy / Left Unassisted",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 140
+  },
+  {
+    "category": "STORE_SERVICE",
+    "code": "STORE_WAIT_TIME_HIGH",
+    "label": "Excessive Billing / Checkout Wait Time",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 150
+  },
+  {
+    "category": "STORE_SERVICE",
+    "code": "STORE_DEMO_NOT_WORKING",
+    "label": "Product Demo Unit Inoperative / Not on Display",
+    "requires_competitor_info": false,
+    "requires_sku_info": true,
+    "requires_price_diff": false,
+    "display_order": 160
+  },
+  {
+    "category": "STORE_SERVICE",
+    "code": "STORE_CUSTOMER_RUSHED",
+    "label": "Customer Rushed / Insufficient Time Today",
+    "requires_competitor_info": false,
+    "requires_sku_info": false,
+    "requires_price_diff": false,
+    "display_order": 170
+  }
+]

@@ -1,0 +1,289 @@
+[
+  {
+    "brand_code": "APPLE",
+    "category_code": "SMARTPHONES",
+    "model_name": "iPhone 16 Pro Max 256GB",
+    "default_variant": "Desert Titanium",
+    "msrp": 144900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "SMARTPHONES",
+    "model_name": "iPhone 16 Pro 128GB",
+    "default_variant": "Black Titanium",
+    "msrp": 119900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "SMARTPHONES",
+    "model_name": "iPhone 16 128GB",
+    "default_variant": "Ultramarine Blue",
+    "msrp": 79900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "SMARTPHONES",
+    "model_name": "iPhone 16 Plus 128GB",
+    "default_variant": "Pink",
+    "msrp": 89900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "SMARTPHONES",
+    "model_name": "iPhone 15 128GB",
+    "default_variant": "Blue",
+    "msrp": 65900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "SMARTPHONES",
+    "model_name": "iPhone 13 128GB",
+    "default_variant": "Midnight",
+    "msrp": 49900
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "SMARTPHONES",
+    "model_name": "Galaxy S24 Ultra 256GB",
+    "default_variant": "Titanium Gray",
+    "msrp": 129999
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "SMARTPHONES",
+    "model_name": "Galaxy S24+ 256GB",
+    "default_variant": "Cobalt Violet",
+    "msrp": 99999
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "SMARTPHONES",
+    "model_name": "Galaxy S24 128GB",
+    "default_variant": "Amber Yellow",
+    "msrp": 74999
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "SMARTPHONES",
+    "model_name": "Galaxy Z Fold6 256GB",
+    "default_variant": "Silver Shadow",
+    "msrp": 164999
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "SMARTPHONES",
+    "model_name": "Galaxy Z Flip6 256GB",
+    "default_variant": "Mint",
+    "msrp": 109999
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "SMARTPHONES",
+    "model_name": "Galaxy A55 5G 128GB",
+    "default_variant": "Awesome Iceblue",
+    "msrp": 39999
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "SMARTPHONES",
+    "model_name": "Galaxy A35 5G 128GB",
+    "default_variant": "Awesome Navy",
+    "msrp": 27999
+  },
+  {
+    "brand_code": "ONEPLUS",
+    "category_code": "SMARTPHONES",
+    "model_name": "OnePlus 12 256GB",
+    "default_variant": "Flowy Emerald",
+    "msrp": 64999
+  },
+  {
+    "brand_code": "ONEPLUS",
+    "category_code": "SMARTPHONES",
+    "model_name": "OnePlus 12R 128GB",
+    "default_variant": "Cool Blue",
+    "msrp": 39999
+  },
+  {
+    "brand_code": "ONEPLUS",
+    "category_code": "SMARTPHONES",
+    "model_name": "Nord 4 128GB",
+    "default_variant": "Oasis Green",
+    "msrp": 29999
+  },
+  {
+    "brand_code": "XIAOMI",
+    "category_code": "SMARTPHONES",
+    "model_name": "Xiaomi 14 Ultra 512GB",
+    "default_variant": "Black",
+    "msrp": 99999
+  },
+  {
+    "brand_code": "XIAOMI",
+    "category_code": "SMARTPHONES",
+    "model_name": "Xiaomi 14 512GB",
+    "default_variant": "Jade Green",
+    "msrp": 69999
+  },
+  {
+    "brand_code": "VIVO",
+    "category_code": "SMARTPHONES",
+    "model_name": "Vivo X100 Pro 512GB",
+    "default_variant": "Asteroid Black",
+    "msrp": 89999
+  },
+  {
+    "brand_code": "VIVO",
+    "category_code": "SMARTPHONES",
+    "model_name": "Vivo V40 Pro 256GB",
+    "default_variant": "Titanium Silver",
+    "msrp": 49999
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "LAPTOPS",
+    "model_name": "MacBook Air 13\" M3 256GB",
+    "default_variant": "Space Gray",
+    "msrp": 114900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "LAPTOPS",
+    "model_name": "MacBook Air 15\" M3 512GB",
+    "default_variant": "Midnight",
+    "msrp": 154900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "LAPTOPS",
+    "model_name": "MacBook Pro 14\" M3 Pro 512GB",
+    "default_variant": "Silver",
+    "msrp": 199900
+  },
+  {
+    "brand_code": "DELL",
+    "category_code": "LAPTOPS",
+    "model_name": "XPS 13 9340 Core Ultra 7",
+    "default_variant": "Platinum Silver",
+    "msrp": 139990
+  },
+  {
+    "brand_code": "DELL",
+    "category_code": "LAPTOPS",
+    "model_name": "Inspiron 15 3530 Core i5",
+    "default_variant": "Carbon Black",
+    "msrp": 54990
+  },
+  {
+    "brand_code": "HP",
+    "category_code": "LAPTOPS",
+    "model_name": "Spectre x360 14 Core Ultra 7",
+    "default_variant": "Nightfall Black",
+    "msrp": 154999
+  },
+  {
+    "brand_code": "HP",
+    "category_code": "LAPTOPS",
+    "model_name": "Pavilion 15 Core i5",
+    "default_variant": "Natural Silver",
+    "msrp": 62999
+  },
+  {
+    "brand_code": "LENOVO",
+    "category_code": "LAPTOPS",
+    "model_name": "ThinkPad E14 Gen 5 Core i5",
+    "default_variant": "Graphite Black",
+    "msrp": 68500
+  },
+  {
+    "brand_code": "LENOVO",
+    "category_code": "LAPTOPS",
+    "model_name": "IdeaPad Slim 3 Core i3",
+    "default_variant": "Arctic Grey",
+    "msrp": 38990
+  },
+  {
+    "brand_code": "ASUS",
+    "category_code": "LAPTOPS",
+    "model_name": "ROG Zephyrus G14 RTX 4060",
+    "default_variant": "Eclipse Gray",
+    "msrp": 149990
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "TABLETS",
+    "model_name": "iPad Air 11\" M2 128GB",
+    "default_variant": "Starlight",
+    "msrp": 59900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "TABLETS",
+    "model_name": "iPad 10th Gen 64GB",
+    "default_variant": "Silver",
+    "msrp": 34900
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "TABLETS",
+    "model_name": "Galaxy Tab S9 FE 128GB",
+    "default_variant": "Gray",
+    "msrp": 36999
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "AUDIO_ACC",
+    "model_name": "AirPods Pro 2nd Gen USB-C",
+    "default_variant": "White",
+    "msrp": 24900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "AUDIO_ACC",
+    "model_name": "AirPods 3rd Gen",
+    "default_variant": "White",
+    "msrp": 19900
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "AUDIO_ACC",
+    "model_name": "Galaxy Buds3 Pro",
+    "default_variant": "Silver",
+    "msrp": 19999
+  },
+  {
+    "brand_code": "SONY",
+    "category_code": "AUDIO_ACC",
+    "model_name": "WH-1000XM5 Wireless Noise Canceling",
+    "default_variant": "Black",
+    "msrp": 29990
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "WEARABLES",
+    "model_name": "Watch Series 10 42mm GPS",
+    "default_variant": "Jet Black Aluminium",
+    "msrp": 46900
+  },
+  {
+    "brand_code": "APPLE",
+    "category_code": "WEARABLES",
+    "model_name": "Watch Ultra 2 49mm GPS+Cell",
+    "default_variant": "Natural Titanium",
+    "msrp": 89900
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "WEARABLES",
+    "model_name": "Galaxy Watch Ultra 47mm LTE",
+    "default_variant": "Titanium Gray",
+    "msrp": 59999
+  },
+  {
+    "brand_code": "SAMSUNG",
+    "category_code": "WEARABLES",
+    "model_name": "Galaxy Watch7 40mm BT",
+    "default_variant": "Green",
+    "msrp": 29999
+  }
+]

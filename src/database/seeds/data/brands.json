@@ -1,0 +1,106 @@
+[
+  {
+    "code": "APPLE",
+    "name": "Apple",
+    "tier": "FLAGSHIP",
+    "category_focus": "Smartphones, Laptops, Tablets, Wearables, Audio",
+    "logo_url": "/brands/apple.svg",
+    "display_order": 1
+  },
+  {
+    "code": "SAMSUNG",
+    "name": "Samsung",
+    "tier": "FLAGSHIP",
+    "category_focus": "Smartphones, Tablets, Wearables, Audio",
+    "logo_url": "/brands/samsung.svg",
+    "display_order": 2
+  },
+  {
+    "code": "ONEPLUS",
+    "name": "OnePlus",
+    "tier": "PREMIUM",
+    "category_focus": "Smartphones, Audio, Tablets",
+    "logo_url": "/brands/oneplus.svg",
+    "display_order": 3
+  },
+  {
+    "code": "XIAOMI",
+    "name": "Xiaomi",
+    "tier": "MASS_MARKET",
+    "category_focus": "Smartphones, Audio, Smart Home",
+    "logo_url": "/brands/xiaomi.svg",
+    "display_order": 4
+  },
+  {
+    "code": "VIVO",
+    "name": "Vivo",
+    "tier": "MASS_MARKET",
+    "category_focus": "Smartphones",
+    "logo_url": "/brands/vivo.svg",
+    "display_order": 5
+  },
+  {
+    "code": "OPPO",
+    "name": "Oppo",
+    "tier": "MASS_MARKET",
+    "category_focus": "Smartphones",
+    "logo_url": "/brands/oppo.svg",
+    "display_order": 6
+  },
+  {
+    "code": "REALME",
+    "name": "Realme",
+    "tier": "BUDGET",
+    "category_focus": "Smartphones, Audio",
+    "logo_url": "/brands/realme.svg",
+    "display_order": 7
+  },
+  {
+    "code": "DELL",
+    "name": "Dell",
+    "tier": "PREMIUM",
+    "category_focus": "Laptops, Desktops, Monitors",
+    "logo_url": "/brands/dell.svg",
+    "display_order": 8
+  },
+  {
+    "code": "HP",
+    "name": "HP",
+    "tier": "PREMIUM",
+    "category_focus": "Laptops, Printers, Accessories",
+    "logo_url": "/brands/hp.svg",
+    "display_order": 9
+  },
+  {
+    "code": "LENOVO",
+    "name": "Lenovo",
+    "tier": "MASS_MARKET",
+    "category_focus": "Laptops, Tablets",
+    "logo_url": "/brands/lenovo.svg",
+    "display_order": 10
+  },
+  {
+    "code": "ASUS",
+    "name": "Asus",
+    "tier": "PREMIUM",
+    "category_focus": "Gaming Laptops, Ultrabooks",
+    "logo_url": "/brands/asus.svg",
+    "display_order": 11
+  },
+  {
+    "code": "SONY",
+    "name": "Sony",
+    "tier": "FLAGSHIP",
+    "category_focus": "Audio & Headphones, Gaming",
+    "logo_url": "/brands/sony.svg",
+    "display_order": 12
+  },
+  {
+    "code": "BOAT",
+    "name": "boAt",
+    "tier": "BUDGET",
+    "category_focus": "Audio & Wearables",
+    "logo_url": "/brands/boat.svg",
+    "display_order": 13
+  }
+]

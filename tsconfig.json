@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "declaration": false,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@image-mobiles-and-computers/common-types": ["../imago-shared-libraries/packages/common-types/dist/index.d.ts"],
+      "@image-mobiles-and-computers/auth-sdk": ["../imago-shared-libraries/packages/auth-sdk/dist/index.d.ts"],
+      "@image-mobiles-and-computers/logger": ["../imago-shared-libraries/packages/logger/dist/index.d.ts"]
+    },
+    "typeRoots": ["../backend/node_modules/@types"]
+  },
+  "include": ["src/**/*"]
+}

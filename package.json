@@ -1,0 +1,27 @@
+{
+  "name": "imago-footfall-service",
+  "version": "1.0.0",
+  "description": "Footfall & Retail Conversion Intelligence Microservice for IMAGO Platform",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "db:migrate": "tsx src/database/migrate.ts",
+    "db:seed": "tsx src/database/seeds/seed-footfall-taxonomies.ts",
+    "db:seed:fresh": "tsx src/database/seeds/seed-footfall-taxonomies.ts --fresh",
+    "db:seed:brands": "tsx src/database/seeds/seed-footfall-taxonomies.ts --brands-only",
+    "db:seed:categories": "tsx src/database/seeds/seed-footfall-taxonomies.ts --categories-only",
+    "db:seed:taxonomies": "tsx src/database/seeds/seed-footfall-taxonomies.ts --taxonomies-only",
+    "db:seed:products": "tsx src/database/seeds/seed-footfall-taxonomies.ts --products-only",
+    "db:seed:sample": "tsx src/database/seeds/seed-footfall-taxonomies.ts --sample-data-only"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Image-Mobiles-And-Computers/imago-footfall-service.git"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

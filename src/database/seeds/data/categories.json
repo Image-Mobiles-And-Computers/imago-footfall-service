@@ -1,0 +1,38 @@
+[
+  {
+    "code": "SMARTPHONES",
+    "name": "Smartphones",
+    "icon": "Smartphone",
+    "display_order": 1
+  },
+  {
+    "code": "LAPTOPS",
+    "name": "Laptops & Computing",
+    "icon": "Laptop",
+    "display_order": 2
+  },
+  {
+    "code": "TABLETS",
+    "name": "Tablets & iPads",
+    "icon": "Tablet",
+    "display_order": 3
+  },
+  {
+    "code": "WEARABLES",
+    "name": "Smartwatches & Wearables",
+    "icon": "Watch",
+    "display_order": 4
+  },
+  {
+    "code": "AUDIO_ACC",
+    "name": "Audio & Accessories",
+    "icon": "Headphones",
+    "display_order": 5
+  },
+  {
+    "code": "SERVICE_REPAIR",
+    "name": "Service & Repairs",
+    "icon": "Wrench",
+    "display_order": 6
+  }
+]
