@@ -203,3 +203,95 @@ export const getExecutiveLossAnalytics = async (req: AuthRequest, res: Response)
     res.status(500).json({ success: false, message: 'Failed to fetch executive analytics', error: error.message });
   }
 };
+
+export const getSkuLossDetails = async (req: AuthRequest, res: Response) => {
+  try {
+    const { sku_name, days = '7' } = req.query;
+    const daysNum = parseInt(days as string, 10) || 7;
+
+    if (!sku_name) {
+      return res.status(400).json({ success: false, message: 'sku_name query parameter is required' });
+    }
+
+    // 1. Detailed breakdown of lost records for this SKU
+    const [incidents]: any = await pool.query(
+      `SELECT 
+         l.id,
+         l.logged_at,
+         l.quoted_price,
+         l.competitor_price,
+         l.competitor_name,
+         l.customer_budget,
+         l.notes,
+         t.code as reason_code,
+         t.label as reason_label,
+         t.category as reason_category,
+         s.session_number,
+         s.customer_name,
+         s.customer_phone,
+         TIMESTAMPDIFF(MINUTE, s.entered_at, s.exited_at) as dwell_minutes,
+         b.name as branch_name,
+         b.code as branch_code,
+         u.full_name as logged_by_staff_name
+       FROM retail_lost_opportunities l
+       LEFT JOIN retail_product_master p ON l.product_id = p.id
+       JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
+       LEFT JOIN retail_walkin_sessions s ON l.session_id = s.id
+       LEFT JOIN imago_org_db.branches b ON s.branch_id = b.id
+       LEFT JOIN imago_iam_db.users u ON l.created_by_user_id = u.id
+       WHERE (p.model_name = ? OR l.requested_sku = ?)
+         AND l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       ORDER BY l.logged_at DESC`,
+      [sku_name, sku_name, daysNum]
+    );
+
+    // 2. Breakdown by Showroom Branch
+    const [branchBreakdown]: any = await pool.query(
+      `SELECT 
+         COALESCE(b.name, 'Flagship Showroom') as branch_name,
+         COUNT(l.id) as lost_count,
+         SUM(CASE WHEN t.code LIKE 'STOCK_%' THEN 1 ELSE 0 END) as stockout_count,
+         SUM(CASE WHEN t.code LIKE 'PRICE_%' THEN 1 ELSE 0 END) as price_loss_count
+       FROM retail_lost_opportunities l
+       LEFT JOIN retail_product_master p ON l.product_id = p.id
+       JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
+       LEFT JOIN retail_walkin_sessions s ON l.session_id = s.id
+       LEFT JOIN imago_org_db.branches b ON s.branch_id = b.id
+       WHERE (p.model_name = ? OR l.requested_sku = ?)
+         AND l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       GROUP BY b.id, b.name
+       ORDER BY lost_count DESC`,
+      [sku_name, sku_name, daysNum]
+    );
+
+    // 3. Reason Taxonomy Pareto for this model
+    const [reasonPareto]: any = await pool.query(
+      `SELECT 
+         t.code,
+         t.label,
+         t.category,
+         COUNT(l.id) as count
+       FROM retail_lost_opportunities l
+       LEFT JOIN retail_product_master p ON l.product_id = p.id
+       JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
+       WHERE (p.model_name = ? OR l.requested_sku = ?)
+         AND l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       GROUP BY t.code, t.label, t.category
+       ORDER BY count DESC`,
+      [sku_name, sku_name, daysNum]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        sku_name,
+        total_incidents: incidents.length,
+        incidents,
+        branch_breakdown: branchBreakdown,
+        reason_pareto: reasonPareto
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch SKU loss details', error: error.message });
+  }
+};
