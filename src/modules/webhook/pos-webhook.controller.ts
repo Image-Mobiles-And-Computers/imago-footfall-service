@@ -166,7 +166,7 @@ export const simulatePosSale = async (req: Request, res: Response) => {
         return res.status(404).json({ success: false, message: 'Walk-in session not found' });
       }
       if (rows[0].status === 'CONVERTED') {
-        return res.status(400).json({ success: false, message: 'This customer walk-in session has already been converted into a POS sale.' });
+        return res.status(400).json({ success: false, message: 'This customer walk-in session has already been converted into a Converted.' });
       }
       targetPhone = rows[0].customer_phone;
       targetBranch = rows[0].branch_id;
@@ -194,6 +194,6 @@ export const simulatePosSale = async (req: Request, res: Response) => {
     req.body = simPayload;
     return handlePosWebhook(req, res);
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to simulate POS sale', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to simulate Converted', error: error.message });
   }
 };
