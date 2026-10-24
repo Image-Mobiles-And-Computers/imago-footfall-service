@@ -77,7 +77,7 @@ export const getBranchLiveMetrics = async (req: AuthRequest, res: Response) => {
 
     // 4. Lost Reason Pareto Breakdown Today
     let paretoQuery = `
-      SELECT t.category, t.label, t.code, COUNT(l.id) as count
+      SELECT t.id as taxonomy_id, t.category, t.label, t.code, COUNT(l.id) as count
       FROM retail_lost_opportunities l
       JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
       WHERE DATE(l.logged_at) = ?
@@ -87,7 +87,7 @@ export const getBranchLiveMetrics = async (req: AuthRequest, res: Response) => {
       paretoQuery += ' AND l.branch_id = ?';
       paretoParams.push(targetBranchId);
     }
-    paretoQuery += ' GROUP BY t.category, t.label, t.code ORDER BY count DESC LIMIT 10';
+    paretoQuery += ' GROUP BY t.id, t.category, t.label, t.code ORDER BY count DESC LIMIT 10';
     const [paretoRows]: any = await pool.query(paretoQuery, paretoParams);
 
     res.json({
@@ -116,10 +116,11 @@ export const getExecutiveLossAnalytics = async (req: AuthRequest, res: Response)
   try {
     const { branch_id, days = '7' } = req.query;
     const daysNum = parseInt(days as string, 10) || 7;
+    const targetBranchId = branch_id && branch_id !== 'ALL' ? String(branch_id) : null;
 
-    // 1. Cross-Branch Heatmap & Ranking
-    const [branchStats]: any = await pool.query(
-      `SELECT 
+    // 1. Cross-Branch Heatmap & Ranking (narrowed to branch if selected)
+    const branchStatsQuery = `
+      SELECT 
          b.id as branch_id,
          b.name as branch_name,
          b.code as branch_code,
@@ -137,14 +138,16 @@ export const getExecutiveLossAnalytics = async (req: AuthRequest, res: Response)
          ON b.id = s.branch_id AND s.entered_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
        LEFT JOIN retail_conversions c 
          ON s.id = c.session_id
+       ${targetBranchId ? 'WHERE b.id = ?' : ''}
        GROUP BY b.id, b.name, b.code, b.city
-       ORDER BY footfall DESC`,
-      [daysNum]
-    );
+       ORDER BY footfall DESC
+    `;
+    const branchStatsParams = targetBranchId ? [daysNum, targetBranchId] : [daysNum];
+    const [branchStats]: any = await pool.query(branchStatsQuery, branchStatsParams);
 
-    // 2. Lost Revenue Opportunity Calculator by SKU & Model
-    const [lostRevenueSKUs]: any = await pool.query(
-      `SELECT 
+    // 2. Lost Revenue Opportunity Calculator by SKU & Model (narrowed to branch if selected)
+    let lostRevenueQuery = `
+      SELECT 
          COALESCE(p.model_name, l.requested_sku, 'Unspecified SKU') as sku_name,
          COALESCE(p.brand_name, 'Generic') as brand_name,
          COALESCE(p.category_name, 'Smartphones') as category_name,
@@ -157,41 +160,131 @@ export const getExecutiveLossAnalytics = async (req: AuthRequest, res: Response)
        LEFT JOIN retail_product_master p ON l.product_id = p.id
        JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
        WHERE l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+    `;
+    const lostRevenueParams: any[] = [daysNum];
+    if (targetBranchId) {
+      lostRevenueQuery += ' AND l.branch_id = ?';
+      lostRevenueParams.push(targetBranchId);
+    }
+    lostRevenueQuery += `
        GROUP BY sku_name, brand_name, category_name, p.msrp
        ORDER BY estimated_revenue_loss DESC
-       LIMIT 10`,
-      [daysNum]
-    );
+       LIMIT 10
+    `;
+    const [lostRevenueSKUs]: any = await pool.query(lostRevenueQuery, lostRevenueParams);
 
-    // 3. Overall Lost Opportunity Root-Cause Distribution
-    const [categoryPareto]: any = await pool.query(
-      `SELECT 
+    // 3. Overall Lost Opportunity Root-Cause Distribution (narrowed to branch if selected)
+    let paretoQuery = `
+      SELECT 
          t.category,
          COUNT(l.id) as count,
-         ROUND(COUNT(l.id) * 100.0 / (SELECT COUNT(*) FROM retail_lost_opportunities WHERE logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)), 1) as percentage
+         ROUND(COUNT(l.id) * 100.0 / NULLIF((SELECT COUNT(*) FROM retail_lost_opportunities WHERE logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY) ${targetBranchId ? 'AND branch_id = ?' : ''}), 0), 1) as percentage
        FROM retail_lost_opportunities l
        JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
        WHERE l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+    `;
+    const paretoParams: any[] = [daysNum];
+    if (targetBranchId) {
+      paretoParams.push(targetBranchId);
+    }
+    paretoParams.push(daysNum);
+    if (targetBranchId) {
+      paretoQuery += ' AND l.branch_id = ?';
+      paretoParams.push(targetBranchId);
+    }
+    paretoQuery += `
        GROUP BY t.category
-       ORDER BY count DESC`,
-      [daysNum, daysNum]
-    );
+       ORDER BY count DESC
+    `;
+    const [categoryPareto]: any = await pool.query(paretoQuery, paretoParams);
 
-    // 4. Stockout Alerts Trigger Criteria (> 3 stockouts in timeframe)
-    const stockoutAlerts = lostRevenueSKUs
-      .filter((sku: any) => Number(sku.stockout_count) >= 1)
-      .map((sku: any) => ({
-        sku_name: sku.sku_name,
-        brand_name: sku.brand_name,
-        stockout_count: Number(sku.stockout_count),
-        potential_loss: Number(sku.estimated_revenue_loss),
-        recommended_action: `Transfer ${Math.max(Number(sku.stockout_count) * 2, 5)} units to Indiranagar Flagship`,
-        can_trigger_initiative: true
-      }));
+    // 4. Resolve Central Warehouse / DC from imago_org_db.branches
+    const [warehouseRows]: any = await pool.query(
+      "SELECT id, name, code, address, city, latitude, longitude FROM imago_org_db.branches WHERE code LIKE '%WH%' OR name LIKE '%Warehouse%' LIMIT 1"
+    );
+    const warehouse = warehouseRows[0] || {
+      id: '3df88d10-ee71-496d-9934-e9a01963e290',
+      name: 'Central Spares & Devices Warehouse',
+      code: 'BR-WH-CENTRAL',
+      address: 'Plot 48, EPIP Zone, Whitefield Industrial Area, Bengaluru, Karnataka 560066',
+      city: 'Bengaluru',
+      latitude: 12.9784,
+      longitude: 77.7289
+    };
+
+    // 5. Stockout Alerts: Query actionable physical SKU stockouts with exact destination showroom
+    let stockoutQuery = `
+      SELECT 
+         COALESCE(p.model_name, l.requested_sku) as sku_name,
+         COALESCE(p.brand_name, 'Generic') as brand_name,
+         COALESCE(p.category_name, 'Smartphones') as category_name,
+         l.branch_id,
+         COALESCE(b.name, 'Regional Showroom') as branch_name,
+         COALESCE(b.code, 'SHOWROOM') as branch_code,
+         COALESCE(b.address, 'Bengaluru') as branch_address,
+         COALESCE(b.city, 'Bengaluru') as branch_city,
+         b.latitude as branch_latitude,
+         b.longitude as branch_longitude,
+         COUNT(l.id) as stockout_count,
+         ROUND(COUNT(l.id) * COALESCE(p.msrp, AVG(l.quoted_price), AVG(l.customer_budget), 50000.00), 2) as estimated_revenue_loss
+       FROM retail_lost_opportunities l
+       LEFT JOIN retail_product_master p ON l.product_id = p.id
+       JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
+       LEFT JOIN imago_org_db.branches b ON l.branch_id = b.id
+       WHERE t.code LIKE 'STOCK_%'
+         AND l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+    `;
+    const stockoutQueryParams: any[] = [daysNum];
+    if (targetBranchId) {
+      stockoutQuery += ' AND l.branch_id = ?';
+      stockoutQueryParams.push(targetBranchId);
+    }
+    stockoutQuery += `
+       GROUP BY sku_name, brand_name, category_name, p.msrp, l.branch_id, b.name, b.code, b.address, b.city, b.latitude, b.longitude
+       HAVING sku_name IS NOT NULL AND sku_name != 'Unspecified SKU' AND stockout_count >= 1
+       ORDER BY estimated_revenue_loss DESC
+       LIMIT 15
+    `;
+    const [stockoutRows]: any = await pool.query(stockoutQuery, stockoutQueryParams);
+
+    const stockoutAlerts = stockoutRows.map((row: any) => ({
+      sku_name: row.sku_name,
+      brand_name: row.brand_name,
+      category_name: row.category_name,
+      stockout_count: Number(row.stockout_count),
+      potential_loss: Number(row.estimated_revenue_loss),
+      branch_id: row.branch_id,
+      branch_name: row.branch_name,
+      branch_code: row.branch_code,
+      branch_address: row.branch_address,
+      branch_city: row.branch_city,
+      branch_latitude: row.branch_latitude ? Number(row.branch_latitude) : null,
+      branch_longitude: row.branch_longitude ? Number(row.branch_longitude) : null,
+      source_warehouse_id: warehouse.id,
+      source_warehouse_name: warehouse.name,
+      source_warehouse_code: warehouse.code,
+      source_warehouse_address: warehouse.address,
+      source_warehouse_latitude: warehouse.latitude ? Number(warehouse.latitude) : null,
+      source_warehouse_longitude: warehouse.longitude ? Number(warehouse.longitude) : null,
+      recommended_action: `Transfer ${Math.max(Number(row.stockout_count) * 2, 5)} units from ${warehouse.name} to ${row.branch_name}`,
+      can_trigger_initiative: true
+    }));
+
+    let targetBranchName = 'All Showrooms Consolidated';
+    if (targetBranchId) {
+      if (branchStats.length > 0) {
+        targetBranchName = branchStats[0].branch_name;
+      } else {
+        const [bRows]: any = await pool.query('SELECT name FROM imago_org_db.branches WHERE id = ?', [targetBranchId]);
+        if (bRows[0]?.name) targetBranchName = bRows[0].name;
+      }
+    }
 
     res.json({
       success: true,
       data: {
+        branch_id: targetBranchId || 'ALL',
+        branch_name: targetBranchId ? targetBranchName : 'All Showrooms Consolidated',
         timeframe_days: daysNum,
         branch_heatmap: branchStats,
         lost_revenue_skus: lostRevenueSKUs,
@@ -206,14 +299,34 @@ export const getExecutiveLossAnalytics = async (req: AuthRequest, res: Response)
 
 export const getSkuLossDetails = async (req: AuthRequest, res: Response) => {
   try {
-    const { sku_name, days = '7' } = req.query;
+    const { sku_name, days = '7', branch_id } = req.query;
     const daysNum = parseInt(days as string, 10) || 7;
+    const targetBranchId = branch_id && branch_id !== 'ALL' ? String(branch_id) : null;
 
     if (!sku_name) {
       return res.status(400).json({ success: false, message: 'sku_name query parameter is required' });
     }
 
-    // 1. Detailed breakdown of lost records for this SKU
+    const skuStr = String(sku_name);
+
+    // Fetch product catalog metadata if available
+    const [productMetaRows]: any = await pool.query(
+      `SELECT id, brand_name as brand, category_name as category, model_name, default_variant, msrp, is_active
+       FROM retail_product_master
+       WHERE model_name = ?
+       LIMIT 1`,
+      [skuStr]
+    );
+    const productMeta = productMetaRows[0] || null;
+
+    // 1. Detailed breakdown of lost records for this SKU (including Unspecified SKU)
+    const incidentsParams: any[] = [skuStr, skuStr, skuStr, daysNum];
+    let incidentsBranchClause = '';
+    if (targetBranchId) {
+      incidentsBranchClause = 'AND (l.branch_id = ? OR s.branch_id = ?)';
+      incidentsParams.push(targetBranchId, targetBranchId);
+    }
+
     const [incidents]: any = await pool.query(
       `SELECT 
          l.id,
@@ -238,13 +351,21 @@ export const getSkuLossDetails = async (req: AuthRequest, res: Response) => {
        JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
        LEFT JOIN retail_walkin_sessions s ON l.session_id = s.id
        LEFT JOIN imago_org_db.branches b ON s.branch_id = b.id
-       WHERE (p.model_name = ? OR l.requested_sku = ?)
+       WHERE ((p.model_name = ? OR l.requested_sku = ?) OR (? = 'Unspecified SKU' AND p.model_name IS NULL AND (l.requested_sku IS NULL OR l.requested_sku = '')))
          AND l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         ${incidentsBranchClause}
        ORDER BY l.logged_at DESC`,
-      [sku_name, sku_name, daysNum]
+      incidentsParams
     );
 
     // 2. Breakdown by Showroom Branch
+    const branchParams: any[] = [skuStr, skuStr, skuStr, daysNum];
+    let branchClause = '';
+    if (targetBranchId) {
+      branchClause = 'AND (l.branch_id = ? OR s.branch_id = ?)';
+      branchParams.push(targetBranchId, targetBranchId);
+    }
+
     const [branchBreakdown]: any = await pool.query(
       `SELECT 
          COALESCE(b.name, 'Flagship Showroom') as branch_name,
@@ -256,14 +377,22 @@ export const getSkuLossDetails = async (req: AuthRequest, res: Response) => {
        JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
        LEFT JOIN retail_walkin_sessions s ON l.session_id = s.id
        LEFT JOIN imago_org_db.branches b ON s.branch_id = b.id
-       WHERE (p.model_name = ? OR l.requested_sku = ?)
+       WHERE ((p.model_name = ? OR l.requested_sku = ?) OR (? = 'Unspecified SKU' AND p.model_name IS NULL AND (l.requested_sku IS NULL OR l.requested_sku = '')))
          AND l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         ${branchClause}
        GROUP BY b.id, b.name
        ORDER BY lost_count DESC`,
-      [sku_name, sku_name, daysNum]
+      branchParams
     );
 
     // 3. Reason Taxonomy Pareto for this model
+    const paretoModelParams: any[] = [skuStr, skuStr, skuStr, daysNum];
+    let paretoModelClause = '';
+    if (targetBranchId) {
+      paretoModelClause = 'AND l.branch_id = ?';
+      paretoModelParams.push(targetBranchId);
+    }
+
     const [reasonPareto]: any = await pool.query(
       `SELECT 
          t.code,
@@ -273,18 +402,28 @@ export const getSkuLossDetails = async (req: AuthRequest, res: Response) => {
        FROM retail_lost_opportunities l
        LEFT JOIN retail_product_master p ON l.product_id = p.id
        JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
-       WHERE (p.model_name = ? OR l.requested_sku = ?)
+       WHERE ((p.model_name = ? OR l.requested_sku = ?) OR (? = 'Unspecified SKU' AND p.model_name IS NULL AND (l.requested_sku IS NULL OR l.requested_sku = '')))
          AND l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         ${paretoModelClause}
        GROUP BY t.code, t.label, t.category
        ORDER BY count DESC`,
-      [sku_name, sku_name, daysNum]
+      paretoModelParams
     );
+
+    // Calculate executive summary metrics
+    const unitPrice = productMeta ? parseFloat(productMeta.msrp || 0) : 0;
+    const estimatedLoss = unitPrice > 0 ? incidents.length * unitPrice : incidents.reduce((sum: number, inc: any) => sum + parseFloat(inc.quoted_price || 0), 0);
+    const dwellSum = incidents.reduce((sum: number, inc: any) => sum + (inc.dwell_minutes ? Number(inc.dwell_minutes) : 0), 0);
+    const avgDwell = incidents.length > 0 ? Math.round(dwellSum / incidents.length) : 0;
 
     res.json({
       success: true,
       data: {
-        sku_name,
+        sku_name: skuStr,
+        product_meta: productMeta,
         total_incidents: incidents.length,
+        estimated_loss_amount: estimatedLoss,
+        avg_dwell_minutes: avgDwell,
         incidents,
         branch_breakdown: branchBreakdown,
         reason_pareto: reasonPareto
@@ -1029,4 +1168,98 @@ export const getSalesAssociatesPerformance = async (req: AuthRequest, res: Respo
     res.status(500).json({ success: false, message: 'Failed to fetch sales associates telemetry', error: error.message });
   }
 };
+
+export const getWalkoutReasonDrillDown = async (req: AuthRequest, res: Response) => {
+  try {
+    const { code, reason_label, taxonomy_id, branch_id, date, days } = req.query;
+
+    if (!code && !reason_label && !taxonomy_id) {
+      return res.status(400).json({ success: false, message: 'code, taxonomy_id, or reason_label is required' });
+    }
+
+    let query = `
+      SELECT 
+        l.id as loss_id,
+        l.session_id,
+        l.branch_id,
+        l.taxonomy_id,
+        l.product_id,
+        COALESCE(l.requested_sku, p.model_name, s.primary_category_name, 'General Inquiry') as requested_sku,
+        l.customer_budget,
+        l.quoted_price,
+        l.competitor_name,
+        l.competitor_price,
+        l.notes,
+        COALESCE(l.logged_by_employee_name, s.assigned_employee_name, 'Showroom Associate') as logged_by_staff_name,
+        l.logged_at,
+        t.label as reason_label,
+        t.category as reason_category,
+        t.code as reason_code,
+        s.session_number,
+        s.customer_name,
+        s.customer_phone,
+        COALESCE(ROUND(s.dwell_duration_seconds / 60), TIMESTAMPDIFF(MINUTE, s.entered_at, COALESCE(s.exited_at, l.logged_at)), 0) as dwell_minutes,
+        s.entered_at,
+        s.exited_at,
+        s.primary_category_name,
+        s.assigned_employee_name,
+        b.name as branch_name,
+        b.code as branch_code
+      FROM retail_lost_opportunities l
+      JOIN retail_reason_taxonomies t ON l.taxonomy_id = t.id
+      LEFT JOIN retail_walkin_sessions s ON l.session_id = s.id
+      LEFT JOIN retail_product_master p ON l.product_id = p.id
+      LEFT JOIN imago_org_db.branches b ON (l.branch_id = b.id OR s.branch_id = b.id)
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (taxonomy_id) {
+      query += ' AND t.id = ?';
+      params.push(taxonomy_id);
+    } else if (code) {
+      query += ' AND t.code = ?';
+      params.push(code);
+    } else if (reason_label) {
+      query += ' AND t.label = ?';
+      params.push(reason_label);
+    }
+
+    if (branch_id && branch_id !== 'ALL') {
+      query += ' AND (l.branch_id = ? OR s.branch_id = ?)';
+      params.push(branch_id, branch_id);
+    }
+
+    if (date) {
+      query += ' AND DATE(l.logged_at) = ?';
+      params.push(date);
+    } else if (days) {
+      const daysNum = parseInt(days as string, 10) || 7;
+      query += ' AND l.logged_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
+      params.push(daysNum);
+    }
+
+    query += ' ORDER BY l.logged_at DESC LIMIT 100';
+
+    const [rows]: any = await pool.query(query, params);
+
+    const totalLost = rows.length;
+    const totalBudget = rows.reduce((acc: number, r: any) => acc + (Number(r.customer_budget) || Number(r.quoted_price) || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        reason_label: rows[0]?.reason_label || reason_label || '',
+        reason_category: rows[0]?.reason_category || '',
+        reason_code: rows[0]?.reason_code || code || '',
+        total_lost: totalLost,
+        estimated_opportunity_value: totalBudget,
+        sessions: rows
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch walkout reason details', error: error.message });
+  }
+};
+
 

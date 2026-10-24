@@ -5,7 +5,8 @@ import {
   getSkuLossDetails, 
   getBranchInsights,
   getBranchComparison,
-  getSalesAssociatesPerformance
+  getSalesAssociatesPerformance,
+  getWalkoutReasonDrillDown
 } from './analytics.controller';
 import { authenticateJwt } from '../../middleware/auth';
 
@@ -17,6 +18,7 @@ router.get('/analytics/branch-live', authenticateJwt, getBranchLiveMetrics);
 // Executive Loss & Conversion Telemetry (Touchpoint D)
 router.get('/analytics/executive-summary', authenticateJwt, getExecutiveLossAnalytics);
 router.get('/analytics/sku-loss-details', authenticateJwt, getSkuLossDetails);
+router.get('/analytics/walkout-reason-details', authenticateJwt, getWalkoutReasonDrillDown);
 
 // Data-driven Showroom Strengths & Conversion Opportunity Areas
 router.get('/analytics/branch-insights', authenticateJwt, getBranchInsights);

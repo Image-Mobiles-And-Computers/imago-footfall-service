@@ -327,7 +327,7 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
 
 export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
   try {
-    const { branch_id, status, search, limit = '100', offset = '0' } = req.query;
+    const { branch_id, status, search, limit = '20', offset = '0', start_date, end_date } = req.query;
     let targetBranchId = branch_id as string | undefined;
 
     let query = `
@@ -359,6 +359,16 @@ export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
     if (status && status !== 'ALL') {
       query += ' AND s.status = ?';
       params.push(status);
+    }
+
+    if (start_date && (start_date as string).trim()) {
+      query += ' AND s.entered_at >= ?';
+      params.push(`${(start_date as string).trim()} 00:00:00`);
+    }
+
+    if (end_date && (end_date as string).trim()) {
+      query += ' AND s.entered_at <= ?';
+      params.push(`${(end_date as string).trim()} 23:59:59`);
     }
 
     if (search && (search as string).trim()) {
@@ -394,6 +404,14 @@ export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
     if (status && status !== 'ALL') {
       countQuery += ' AND s.status = ?';
       countParams.push(status);
+    }
+    if (start_date && (start_date as string).trim()) {
+      countQuery += ' AND s.entered_at >= ?';
+      countParams.push(`${(start_date as string).trim()} 00:00:00`);
+    }
+    if (end_date && (end_date as string).trim()) {
+      countQuery += ' AND s.entered_at <= ?';
+      countParams.push(`${(end_date as string).trim()} 23:59:59`);
     }
     if (search && (search as string).trim()) {
       const q = `%${(search as string).trim()}%`;
