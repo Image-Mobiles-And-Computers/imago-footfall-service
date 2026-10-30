@@ -1,22 +1,19 @@
 import { Request, Response } from 'express';
 import { pool } from '../../config/db';
 import { AuthRequest } from '../../middleware/auth';
+import { resolveBranchScope, isGlobalUser } from '../../middleware/rbacScope';
 
 export const getBranchLiveMetrics = async (req: AuthRequest, res: Response) => {
   try {
     const { branch_id, date } = req.query;
-    let targetBranchId = branch_id as string | undefined;
-
-    if (!targetBranchId && !req.user?.roles?.includes('SUPER_ADMIN')) {
-      targetBranchId = req.user?.branch_id || undefined;
-    }
+    const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
 
     const dateFilter = date ? String(date) : new Date().toISOString().slice(0, 10);
 
     let whereClause = 'WHERE DATE(s.entered_at) = ?';
     const params: any[] = [dateFilter];
 
-    if (targetBranchId && targetBranchId !== 'ALL') {
+    if (targetBranchId) {
       whereClause += ' AND s.branch_id = ?';
       params.push(targetBranchId);
     }
@@ -116,7 +113,7 @@ export const getExecutiveLossAnalytics = async (req: AuthRequest, res: Response)
   try {
     const { branch_id, days = '7' } = req.query;
     const daysNum = parseInt(days as string, 10) || 7;
-    const targetBranchId = branch_id && branch_id !== 'ALL' ? String(branch_id) : null;
+    const { targetBranchId, isGlobal, branchName: scopedBranchName } = await resolveBranchScope(req, branch_id as string);
 
     // 1. Cross-Branch Heatmap & Ranking (narrowed to branch if selected)
     const branchStatsQuery = `
@@ -272,7 +269,9 @@ export const getExecutiveLossAnalytics = async (req: AuthRequest, res: Response)
 
     let targetBranchName = 'All Showrooms Consolidated';
     if (targetBranchId) {
-      if (branchStats.length > 0) {
+      if (scopedBranchName) {
+        targetBranchName = scopedBranchName;
+      } else if (branchStats.length > 0) {
         targetBranchName = branchStats[0].branch_name;
       } else {
         const [bRows]: any = await pool.query('SELECT name FROM imago_org_db.branches WHERE id = ?', [targetBranchId]);
@@ -285,6 +284,7 @@ export const getExecutiveLossAnalytics = async (req: AuthRequest, res: Response)
       data: {
         branch_id: targetBranchId || 'ALL',
         branch_name: targetBranchId ? targetBranchName : 'All Showrooms Consolidated',
+        is_global_view: isGlobal,
         timeframe_days: daysNum,
         branch_heatmap: branchStats,
         lost_revenue_skus: lostRevenueSKUs,
@@ -301,7 +301,7 @@ export const getSkuLossDetails = async (req: AuthRequest, res: Response) => {
   try {
     const { sku_name, days = '7', branch_id } = req.query;
     const daysNum = parseInt(days as string, 10) || 7;
-    const targetBranchId = branch_id && branch_id !== 'ALL' ? String(branch_id) : null;
+    const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
 
     if (!sku_name) {
       return res.status(400).json({ success: false, message: 'sku_name query parameter is required' });
@@ -525,7 +525,8 @@ export const getBranchInsights = async (req: AuthRequest, res: Response) => {
   try {
     const { branch_id, days = '7' } = req.query;
     const daysNum = parseInt(days as string, 10) || 7;
-    const branchId = branch_id ? String(branch_id) : '';
+    const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
+    const branchId = targetBranchId || (branch_id ? String(branch_id) : '');
 
     if (!branchId) {
       return res.status(400).json({ success: false, message: 'branch_id query parameter is required' });
@@ -1225,9 +1226,10 @@ export const getWalkoutReasonDrillDown = async (req: AuthRequest, res: Response)
       params.push(reason_label);
     }
 
-    if (branch_id && branch_id !== 'ALL') {
+    const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
+    if (targetBranchId) {
       query += ' AND (l.branch_id = ? OR s.branch_id = ?)';
-      params.push(branch_id, branch_id);
+      params.push(targetBranchId, targetBranchId);
     }
 
     if (date) {

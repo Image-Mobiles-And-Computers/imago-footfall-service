@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { pool } from '../../config/db';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthRequest } from '../../middleware/auth';
+import { resolveBranchScope, isGlobalUser } from '../../middleware/rbacScope';
 
 export const createWalkIn = async (req: AuthRequest, res: Response) => {
   const connection = await pool.getConnection();
@@ -16,7 +17,7 @@ export const createWalkIn = async (req: AuthRequest, res: Response) => {
       assigned_employee_name
     } = req.body;
 
-    const targetBranchId = branch_id || req.user?.branch_id;
+    const { targetBranchId } = await resolveBranchScope(req, branch_id);
     if (!targetBranchId) {
       return res.status(400).json({ success: false, message: 'branch_id is required' });
     }
@@ -96,12 +97,7 @@ export const createWalkIn = async (req: AuthRequest, res: Response) => {
 export const getActiveWalkIns = async (req: AuthRequest, res: Response) => {
   try {
     const { branch_id } = req.query;
-    let targetBranchId = branch_id as string | undefined;
-
-    // If not super admin and no branch query provided, default to user's branch
-    if (!targetBranchId && !req.user?.roles?.includes('SUPER_ADMIN')) {
-      targetBranchId = req.user?.branch_id || undefined;
-    }
+    const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
 
     let query = `
       SELECT s.*,
@@ -141,9 +137,15 @@ export const reassignWalkIn = async (req: AuthRequest, res: Response) => {
 
     await connection.beginTransaction();
 
-    const [sessionRows]: any = await connection.query('SELECT status FROM retail_walkin_sessions WHERE id = ?', [id]);
+    const [sessionRows]: any = await connection.query('SELECT status, branch_id FROM retail_walkin_sessions WHERE id = ?', [id]);
     if (!sessionRows[0]) {
       return res.status(404).json({ success: false, message: 'Session not found' });
+    }
+
+    const session = sessionRows[0];
+    if (!isGlobalUser(req) && req.user?.branch_id && session.branch_id !== req.user.branch_id) {
+      await connection.rollback();
+      return res.status(403).json({ success: false, message: 'Forbidden: Cannot reassign walk-in session from another branch' });
     }
 
     const previousStatus = sessionRows[0].status;
@@ -202,6 +204,11 @@ export const logLostOpportunity = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: 'Session not found' });
     }
     const session = sessionRows[0];
+
+    if (!isGlobalUser(req) && req.user?.branch_id && session.branch_id !== req.user.branch_id) {
+      await connection.rollback();
+      return res.status(403).json({ success: false, message: 'Forbidden: Cannot log lost opportunities for another branch' });
+    }
 
     // If product_id is supplied without brand_id, look up brand_id
     let resolvedBrandId = brand_id;
@@ -281,6 +288,11 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
     }
     const session = sessionRows[0];
 
+    if (!isGlobalUser(req) && req.user?.branch_id && session.branch_id !== req.user.branch_id) {
+      await connection.rollback();
+      return res.status(403).json({ success: false, message: 'Forbidden: Cannot convert sessions for another branch' });
+    }
+
     // Mark session as CONVERTED
     await connection.query(
       `UPDATE retail_walkin_sessions
@@ -328,7 +340,7 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
 export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
   try {
     const { branch_id, status, search, limit = '20', offset = '0', start_date, end_date } = req.query;
-    let targetBranchId = branch_id as string | undefined;
+    const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
 
     let query = `
       SELECT s.*,
@@ -351,7 +363,7 @@ export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
     `;
     const params: any[] = [];
 
-    if (targetBranchId && targetBranchId !== 'ALL') {
+    if (targetBranchId) {
       query += ' AND s.branch_id = ?';
       params.push(targetBranchId);
     }
