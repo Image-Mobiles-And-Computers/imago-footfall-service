@@ -561,6 +561,8 @@ export const updateHoCampaign = async (req: AuthRequest, res: Response) => {
       intake_questions_json
     } = req.body;
 
+    const branchIds = target_branch_ids_json !== undefined ? target_branch_ids_json : req.body.target_branch_ids;
+
     await pool.query(`
       UPDATE retail_greeting_ho_campaigns
       SET
@@ -570,9 +572,9 @@ export const updateHoCampaign = async (req: AuthRequest, res: Response) => {
         media_url = COALESCE(?, media_url),
         banner_image_url = COALESCE(?, banner_image_url),
         thumbnail_url = COALESCE(?, thumbnail_url),
-        target_brand_priority_id = ?,
+        target_brand_priority_id = COALESCE(?, target_brand_priority_id),
         target_branch_scope = COALESCE(?, target_branch_scope),
-        target_branch_ids_json = ?,
+        target_branch_ids_json = COALESCE(?, target_branch_ids_json),
         start_date = COALESCE(?, start_date),
         end_date = COALESCE(?, end_date),
         is_active = COALESCE(?, is_active),
@@ -587,7 +589,7 @@ export const updateHoCampaign = async (req: AuthRequest, res: Response) => {
       thumbnail_url || null,
       target_brand_priority_id !== undefined ? (target_brand_priority_id || null) : null,
       target_branch_scope || null,
-      target_branch_ids_json !== undefined ? (JSON.stringify(target_branch_ids_json) || null) : null,
+      branchIds !== undefined ? (JSON.stringify(branchIds) || null) : null,
       start_date || null,
       end_date || null,
       is_active !== undefined ? is_active : null,
