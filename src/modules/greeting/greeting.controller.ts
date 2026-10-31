@@ -604,6 +604,46 @@ export const updateHoCampaign = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * Bulk Toggle Brand Broadcast (Switch ON or OFF all campaigns for a specific brand across showrooms)
+ */
+export const toggleBrandBroadcast = async (req: AuthRequest, res: Response) => {
+  try {
+    const roles: string[] = (req.user?.roles || []).map((r: any) => typeof r === 'string' ? r : r.name);
+    const isHoAuthorized = isGlobalUser(req) || roles.some(r => 
+      ['SUPER_ADMIN', 'HO_SALES_DIRECTOR', 'COMMERCIAL_OPS_MANAGER', 'HO_STAFF'].includes(r)
+    );
+
+    if (!isHoAuthorized) {
+      return res.status(403).json({
+        success: false,
+        message: 'RBAC Access Denied: Only Head Office Commercial leadership can toggle brand broadcasts.'
+      });
+    }
+
+    const brandName = decodeURIComponent(String(req.params.brand_name));
+    const { is_active } = req.body;
+    const activeValue = is_active ? 1 : 0;
+
+    await pool.query(`
+      UPDATE retail_greeting_ho_campaigns c
+      LEFT JOIN retail_brand_master b ON c.target_brand_priority_id = b.id
+      SET c.is_active = ?
+      WHERE 
+        LOWER(COALESCE(b.name, '')) = LOWER(?) OR 
+        LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.intake_questions_json, '$.target_brand_name')), '')) = LOWER(?) OR
+        LOWER(c.campaign_name) LIKE CONCAT('%', LOWER(?), '%')
+    `, [activeValue, brandName, brandName, brandName]);
+
+    res.json({
+      success: true,
+      message: `Brand "${brandName}" broadcast status successfully set to ${is_active ? 'ACTIVE' : 'MUTED'}`
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to toggle brand broadcast', error: error.message });
+  }
+};
+
+/**
  * List Greeting Terminals
  */
 export const getGreetingTerminals = async (req: AuthRequest, res: Response) => {

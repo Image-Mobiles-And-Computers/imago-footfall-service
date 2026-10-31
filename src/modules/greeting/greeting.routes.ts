@@ -17,7 +17,8 @@ import {
   updateGreetingTerminal,
   recordTerminalHeartbeat,
   getFleetOverview,
-  disconnectTerminal
+  disconnectTerminal,
+  toggleBrandBroadcast
 } from './greeting.controller';
 import { authenticateJwt, optionalAuthenticateJwt } from '../../middleware/auth';
 
@@ -43,6 +44,7 @@ router.get('/greeting/ho/campaigns', optionalAuthenticateJwt, getActiveHoCampaig
 router.post('/greeting/ho/campaigns', authenticateJwt, createHoCampaign);
 router.put('/greeting/ho/campaigns/:id', authenticateJwt, updateHoCampaign);
 router.patch('/greeting/ho/campaigns/:id', authenticateJwt, updateHoCampaign);
+router.patch('/greeting/ho/brands/:brand_name/toggle', authenticateJwt, toggleBrandBroadcast);
 router.get('/greeting/fleet/overview', optionalAuthenticateJwt, getFleetOverview);
 
 // 5. Hardware Greeting Terminals & Heartbeat
