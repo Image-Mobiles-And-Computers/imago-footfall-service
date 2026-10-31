@@ -661,8 +661,8 @@ export const getGreetingTerminals = async (req: AuthRequest, res: Response) => {
         c.welcome_headline as assigned_campaign_headline,
         u.full_name as greeter_name,
         CASE 
-          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 2 MINUTE THEN 'ONLINE'
-          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 10 MINUTE THEN 'STANDBY'
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 15 MINUTE THEN 'ONLINE'
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 120 MINUTE THEN 'STANDBY'
           ELSE 'OFFLINE'
         END as connectivity_status,
         (
@@ -699,24 +699,40 @@ export const updateGreetingTerminal = async (req: AuthRequest, res: Response) =>
     const terminalId = String(req.params.id);
     const { active_ho_campaign_id, paired_setup_pin, device_name, floor_zone, device_model } = req.body;
 
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (active_ho_campaign_id !== undefined) {
+      updates.push('active_ho_campaign_id = ?');
+      values.push(active_ho_campaign_id ? String(active_ho_campaign_id) : null);
+    }
+    if (paired_setup_pin !== undefined) {
+      updates.push('paired_setup_pin = ?');
+      values.push(paired_setup_pin ? String(paired_setup_pin).trim() : null);
+    }
+    if (device_name !== undefined) {
+      updates.push('device_name = ?');
+      values.push(device_name ? String(device_name).trim() : null);
+    }
+    if (floor_zone !== undefined) {
+      updates.push('floor_zone = ?');
+      values.push(floor_zone ? String(floor_zone).trim() : null);
+    }
+    if (device_model !== undefined) {
+      updates.push('device_model = ?');
+      values.push(device_model ? String(device_model).trim() : null);
+    }
+
+    if (updates.length === 0) {
+      return res.json({ success: true, message: 'No fields to update' });
+    }
+
+    values.push(terminalId, terminalId);
     await pool.query(`
       UPDATE retail_greeting_terminals
-      SET
-        active_ho_campaign_id = ?,
-        paired_setup_pin = COALESCE(?, paired_setup_pin),
-        device_name = COALESCE(?, device_name),
-        floor_zone = COALESCE(?, floor_zone),
-        device_model = COALESCE(?, device_model)
+      SET ${updates.join(', ')}
       WHERE id = ? OR terminal_code = ?
-    `, [
-      active_ho_campaign_id !== undefined ? (active_ho_campaign_id || null) : null,
-      paired_setup_pin || null,
-      device_name || null,
-      floor_zone || null,
-      device_model || null,
-      terminalId,
-      terminalId
-    ]);
+    `, values);
 
     res.json({ success: true, message: 'Greeting terminal configuration updated successfully' });
   } catch (error: any) {
@@ -824,8 +840,8 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
         t.paired_setup_pin,
         t.active_ho_campaign_id,
         CASE 
-          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 2 MINUTE THEN 'ONLINE'
-          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 10 MINUTE THEN 'STANDBY'
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 15 MINUTE THEN 'ONLINE'
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 120 MINUTE THEN 'STANDBY'
           ELSE 'OFFLINE'
         END as connectivity_status,
         COALESCE(tc.campaign_name, def_c.campaign_name) as active_campaign_name,
