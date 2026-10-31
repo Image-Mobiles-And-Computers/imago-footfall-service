@@ -18,7 +18,8 @@ import {
   recordTerminalHeartbeat,
   getFleetOverview,
   disconnectTerminal,
-  toggleBrandBroadcast
+  toggleBrandBroadcast,
+  pinTerminalCampaign
 } from './greeting.controller';
 import { authenticateJwt, optionalAuthenticateJwt } from '../../middleware/auth';
 
@@ -51,6 +52,7 @@ router.get('/greeting/fleet/overview', optionalAuthenticateJwt, getFleetOverview
 router.get('/greeting/terminals', optionalAuthenticateJwt, getGreetingTerminals);
 router.post('/greeting/terminals', authenticateJwt, registerGreetingTerminal);
 router.patch('/greeting/terminals/:id/setup', authenticateJwt, updateGreetingTerminal);
+router.patch('/greeting/terminals/:id/pin-campaign', optionalAuthenticateJwt, pinTerminalCampaign);
 router.post('/greeting/terminals/:id/heartbeat', optionalAuthenticateJwt, recordTerminalHeartbeat);
 router.post('/greeting/terminals/:code/disconnect', optionalAuthenticateJwt, disconnectTerminal);
 

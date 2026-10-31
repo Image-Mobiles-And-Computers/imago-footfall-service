@@ -658,10 +658,22 @@ export const getGreetingTerminals = async (req: AuthRequest, res: Response) => {
         b.city,
         b.state,
         c.campaign_name as assigned_campaign_name,
-        c.welcome_headline as assigned_campaign_headline
+        c.welcome_headline as assigned_campaign_headline,
+        u.full_name as greeter_name,
+        CASE 
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 2 MINUTE THEN 'ONLINE'
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 10 MINUTE THEN 'STANDBY'
+          ELSE 'OFFLINE'
+        END as connectivity_status,
+        (
+          SELECT COUNT(*) 
+          FROM retail_greeting_logs gl 
+          WHERE gl.terminal_id = t.id AND DATE(gl.greeted_at) = CURDATE()
+        ) as today_intakes_count
       FROM retail_greeting_terminals t
       LEFT JOIN imago_org_db.branches b ON t.branch_id = b.id
       LEFT JOIN retail_greeting_ho_campaigns c ON t.active_ho_campaign_id = c.id
+      LEFT JOIN imago_iam_db.users u ON t.active_greeter_id = u.id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -788,9 +800,11 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
 
     let branchFilter = '';
     const params: any[] = [];
-
-    // If branch-scoped manager, limit to their branch
-    if (!isHo && req.user?.branch_id) {
+    const requestedBranch = (req.query.branch_id as string) || '';
+    if (requestedBranch && requestedBranch !== 'ALL') {
+      branchFilter = 'WHERE t.branch_id = ?';
+      params.push(requestedBranch);
+    } else if (!isHo && req.user?.branch_id) {
       branchFilter = 'WHERE t.branch_id = ?';
       params.push(req.user.branch_id);
     }
@@ -808,12 +822,14 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
         t.floor_zone,
         t.last_heartbeat_at,
         t.paired_setup_pin,
+        t.active_ho_campaign_id,
         CASE 
           WHEN t.last_heartbeat_at >= NOW() - INTERVAL 2 MINUTE THEN 'ONLINE'
           WHEN t.last_heartbeat_at >= NOW() - INTERVAL 10 MINUTE THEN 'STANDBY'
           ELSE 'OFFLINE'
         END as connectivity_status,
         COALESCE(tc.campaign_name, def_c.campaign_name) as active_campaign_name,
+        bm.name as active_brand_name,
         COALESCE(tc.welcome_headline, def_c.welcome_headline) as welcome_headline,
         COALESCE(tc.media_type, def_c.media_type) as media_type,
         COALESCE(tc.media_url, def_c.media_url) as media_url,
@@ -830,12 +846,13 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
       LEFT JOIN imago_org_db.branches b ON t.branch_id = b.id
       LEFT JOIN retail_greeting_ho_campaigns tc ON t.active_ho_campaign_id = tc.id
       LEFT JOIN (
-        SELECT id, campaign_name, welcome_headline, media_type, media_url, banner_image_url, thumbnail_url, intake_questions_json
+        SELECT id, campaign_name, target_brand_priority_id, welcome_headline, media_type, media_url, banner_image_url, thumbnail_url, intake_questions_json
         FROM retail_greeting_ho_campaigns
         WHERE is_active = TRUE AND CURDATE() BETWEEN start_date AND end_date
         ORDER BY created_at DESC
         LIMIT 1
       ) def_c ON t.active_ho_campaign_id IS NULL
+      LEFT JOIN retail_brand_master bm ON COALESCE(tc.target_brand_priority_id, def_c.target_brand_priority_id) = bm.id
       LEFT JOIN imago_iam_db.users u ON t.active_greeter_id = u.id
       ${branchFilter}
       ORDER BY b.name ASC, t.terminal_code ASC
@@ -882,3 +899,31 @@ export const disconnectTerminal = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'Failed to disconnect terminal', error: error.message });
   }
 };
+
+/**
+ * Pin or Unpin a Campaign on a Specific Terminal (or set to NULL for Auto-Playlist)
+ */
+export const pinTerminalCampaign = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id || '');
+    const { campaign_id } = req.body;
+
+    const effectiveCampaignId = (!campaign_id || campaign_id === 'AUTO_PLAYLIST') ? null : campaign_id;
+
+    await pool.query(`
+      UPDATE retail_greeting_terminals
+      SET active_ho_campaign_id = ?
+      WHERE id = ? OR terminal_code = ?
+    `, [effectiveCampaignId, id, id]);
+
+    res.json({
+      success: true,
+      message: effectiveCampaignId 
+        ? 'Terminal pinned to campaign successfully' 
+        : 'Terminal set to Auto-Playlist mode successfully'
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to update terminal campaign', error: error.message });
+  }
+};
+
