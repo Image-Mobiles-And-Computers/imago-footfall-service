@@ -769,8 +769,8 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
         t.last_heartbeat_at,
         t.paired_setup_pin,
         CASE 
-          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 5 MINUTE THEN 'ONLINE'
-          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 60 MINUTE THEN 'STANDBY'
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 2 MINUTE THEN 'ONLINE'
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 10 MINUTE THEN 'STANDBY'
           ELSE 'OFFLINE'
         END as connectivity_status,
         COALESCE(tc.campaign_name, def_c.campaign_name) as active_campaign_name,
@@ -779,6 +779,7 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
         COALESCE(tc.media_url, def_c.media_url) as media_url,
         COALESCE(tc.banner_image_url, def_c.banner_image_url) as banner_image_url,
         COALESCE(tc.thumbnail_url, def_c.thumbnail_url) as thumbnail_url,
+        COALESCE(tc.intake_questions_json, def_c.intake_questions_json) as intake_questions_json,
         u.full_name as greeter_name,
         (
           SELECT COUNT(*) 
@@ -789,7 +790,7 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
       LEFT JOIN imago_org_db.branches b ON t.branch_id = b.id
       LEFT JOIN retail_greeting_ho_campaigns tc ON t.active_ho_campaign_id = tc.id
       LEFT JOIN (
-        SELECT id, campaign_name, welcome_headline, media_type, media_url, banner_image_url, thumbnail_url
+        SELECT id, campaign_name, welcome_headline, media_type, media_url, banner_image_url, thumbnail_url, intake_questions_json
         FROM retail_greeting_ho_campaigns
         WHERE is_active = TRUE AND CURDATE() BETWEEN start_date AND end_date
         ORDER BY created_at DESC
@@ -821,5 +822,23 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch fleet overview', error: error.message });
+  }
+};
+
+/**
+ * Disconnect / Unpair a terminal - resets heartbeat to mark OFFLINE immediately
+ */
+export const disconnectTerminal = async (req: Request, res: Response) => {
+  try {
+    const code = String(req.params.code || '');
+    await pool.query(`
+      UPDATE retail_greeting_terminals
+      SET last_heartbeat_at = NOW() - INTERVAL 1 DAY, active_greeter_id = NULL
+      WHERE terminal_code = ?
+    `, [code]);
+
+    res.json({ success: true, message: `Terminal ${code} disconnected and marked OFFLINE` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to disconnect terminal', error: error.message });
   }
 };

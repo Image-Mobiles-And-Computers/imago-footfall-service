@@ -16,7 +16,8 @@ import {
   registerGreetingTerminal,
   updateGreetingTerminal,
   recordTerminalHeartbeat,
-  getFleetOverview
+  getFleetOverview,
+  disconnectTerminal
 } from './greeting.controller';
 import { authenticateJwt, optionalAuthenticateJwt } from '../../middleware/auth';
 
@@ -49,5 +50,6 @@ router.get('/greeting/terminals', optionalAuthenticateJwt, getGreetingTerminals)
 router.post('/greeting/terminals', authenticateJwt, registerGreetingTerminal);
 router.patch('/greeting/terminals/:id/setup', authenticateJwt, updateGreetingTerminal);
 router.post('/greeting/terminals/:id/heartbeat', optionalAuthenticateJwt, recordTerminalHeartbeat);
+router.post('/greeting/terminals/:code/disconnect', optionalAuthenticateJwt, disconnectTerminal);
 
 export default router;
