@@ -439,8 +439,8 @@ export const getActiveHoCampaigns = async (req: AuthRequest, res: Response) => {
       branchFilter = `
         AND (
           c.target_branch_scope = 'ALL_STORES' OR
-          c.target_branch_ids IS NULL OR
-          JSON_CONTAINS(c.target_branch_ids, JSON_QUOTE(?))
+          c.target_branch_ids_json IS NULL OR
+          JSON_CONTAINS(c.target_branch_ids_json, JSON_QUOTE(?))
         )
       `;
       params.push(String(branch_id));
@@ -452,7 +452,9 @@ export const getActiveHoCampaigns = async (req: AuthRequest, res: Response) => {
         bm.name as target_brand_name
       FROM retail_greeting_ho_campaigns c
       LEFT JOIN retail_brand_master bm ON c.target_brand_priority_id = bm.id
-      WHERE c.is_active = TRUE AND CURDATE() BETWEEN c.start_date AND c.end_date
+      WHERE c.is_active = TRUE 
+        AND (c.start_date IS NULL OR c.start_date <= CURDATE())
+        AND (c.end_date IS NULL OR c.end_date >= CURDATE())
       ${branchFilter}
       ORDER BY c.created_at DESC
     `, params);

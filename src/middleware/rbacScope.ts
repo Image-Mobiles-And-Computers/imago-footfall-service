@@ -94,8 +94,10 @@ export async function resolveBranchScope(
     }
   }
 
+  const effectiveBranchId = userBranchId || (requestedBranchId && requestedBranchId !== 'ALL' && requestedBranchId !== 'undefined' && requestedBranchId !== 'null' ? String(requestedBranchId) : null);
+
   return {
-    targetBranchId: userBranchId,
+    targetBranchId: effectiveBranchId,
     isGlobal: false,
     branchName,
     branchCode

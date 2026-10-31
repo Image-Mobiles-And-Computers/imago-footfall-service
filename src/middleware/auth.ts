@@ -32,11 +32,11 @@ export const authenticateJwt = async (req: AuthRequest, res: Response, next: Nex
 
     req.user = {
       id: decoded.userId || decoded.id,
-      employee_code: decoded.employeeCode || '',
-      full_name: decoded.fullName || decoded.name || '',
+      employee_code: decoded.employeeCode || decoded.employee_code || '',
+      full_name: decoded.fullName || decoded.full_name || decoded.name || '',
       email: decoded.email,
-      department_id: decoded.departmentId,
-      branch_id: decoded.branchId,
+      department_id: decoded.departmentId || decoded.department_id,
+      branch_id: decoded.branchId || decoded.branch_id,
       roles: decoded.roles || (req.headers['x-user-role'] ? [String(req.headers['x-user-role'])] : ['STAFF']),
       role_scopes: decoded.role_scopes || ['BRANCH'],
       permissions: decoded.permissions || []
@@ -46,6 +46,34 @@ export const authenticateJwt = async (req: AuthRequest, res: Response, next: Nex
   } catch (error) {
     res.status(401).json({ success: false, message: 'Invalid or expired session token.' });
   }
+};
+
+export const optionalAuthenticateJwt = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const secret = process.env.JWT_SECRET || 'imago_enterprise_erp_jwt_secret_key_image_2026';
+    const decoded = jwt.verify(token, secret) as any;
+
+    req.user = {
+      id: decoded.userId || decoded.id,
+      employee_code: decoded.employeeCode || decoded.employee_code || '',
+      full_name: decoded.fullName || decoded.full_name || decoded.name || '',
+      email: decoded.email,
+      department_id: decoded.departmentId || decoded.department_id,
+      branch_id: decoded.branchId || decoded.branch_id,
+      roles: decoded.roles || (req.headers['x-user-role'] ? [String(req.headers['x-user-role'])] : ['STAFF']),
+      role_scopes: decoded.role_scopes || ['BRANCH'],
+      permissions: decoded.permissions || []
+    };
+  } catch (error) {
+    // Non-blocking for public or kiosk terminals
+  }
+  next();
 };
 
 export const requirePermission = (permissionCode: string) => {

@@ -18,36 +18,36 @@ import {
   recordTerminalHeartbeat,
   getFleetOverview
 } from './greeting.controller';
-import { authenticateJwt } from '../../middleware/auth';
+import { authenticateJwt, optionalAuthenticateJwt } from '../../middleware/auth';
 
 const router = Router();
 
 // 1. Entrance Greeter Quick Intake & Lookup
-router.post('/greeting/walkin', authenticateJwt, quickIntakeWalkIn);
-router.get('/greeting/customer-lookup', authenticateJwt, lookupCustomerByPhone);
-router.post('/greeting/recommendation', authenticateJwt, getRoutingRecommendation);
+router.post('/greeting/walkin', optionalAuthenticateJwt, quickIntakeWalkIn);
+router.get('/greeting/customer-lookup', optionalAuthenticateJwt, lookupCustomerByPhone);
+router.post('/greeting/recommendation', optionalAuthenticateJwt, getRoutingRecommendation);
 
 // 2. Real-Time Floor Staff Presence Board
-router.get('/greeting/staff/status', authenticateJwt, getStaffFloorPresence);
+router.get('/greeting/staff/status', optionalAuthenticateJwt, getStaffFloorPresence);
 router.patch('/greeting/staff/:employee_id/status', authenticateJwt, updateStaffFloorStatus);
 
 // 3. Peak-Hour Virtual Queue & Token Management
-router.post('/greeting/tokens', authenticateJwt, issueQueueToken);
-router.get('/greeting/tokens', authenticateJwt, getActiveQueueTokens);
+router.post('/greeting/tokens', optionalAuthenticateJwt, issueQueueToken);
+router.get('/greeting/tokens', optionalAuthenticateJwt, getActiveQueueTokens);
 router.patch('/greeting/tokens/:id/call', authenticateJwt, callQueueToken);
 router.patch('/greeting/tokens/:id/status', authenticateJwt, updateQueueTokenStatus);
 
 // 4. Head Office (HO) Sales Campaigns & Fleet Monitor
-router.get('/greeting/ho/campaigns', authenticateJwt, getActiveHoCampaigns);
+router.get('/greeting/ho/campaigns', optionalAuthenticateJwt, getActiveHoCampaigns);
 router.post('/greeting/ho/campaigns', authenticateJwt, createHoCampaign);
 router.put('/greeting/ho/campaigns/:id', authenticateJwt, updateHoCampaign);
 router.patch('/greeting/ho/campaigns/:id', authenticateJwt, updateHoCampaign);
-router.get('/greeting/fleet/overview', authenticateJwt, getFleetOverview);
+router.get('/greeting/fleet/overview', optionalAuthenticateJwt, getFleetOverview);
 
 // 5. Hardware Greeting Terminals & Heartbeat
-router.get('/greeting/terminals', authenticateJwt, getGreetingTerminals);
+router.get('/greeting/terminals', optionalAuthenticateJwt, getGreetingTerminals);
 router.post('/greeting/terminals', authenticateJwt, registerGreetingTerminal);
 router.patch('/greeting/terminals/:id/setup', authenticateJwt, updateGreetingTerminal);
-router.post('/greeting/terminals/:id/heartbeat', authenticateJwt, recordTerminalHeartbeat);
+router.post('/greeting/terminals/:id/heartbeat', optionalAuthenticateJwt, recordTerminalHeartbeat);
 
 export default router;
