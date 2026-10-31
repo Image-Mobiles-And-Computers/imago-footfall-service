@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { pool } from '../../config/db';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthRequest } from '../../middleware/auth';
-import { resolveBranchScope } from '../../middleware/rbacScope';
+import { resolveBranchScope, isGlobalUser } from '../../middleware/rbacScope';
 import { PresenceService } from './presence.service';
 import { RoutingEngine } from './routing.engine';
 import { QueueService } from './queue.service';
@@ -452,16 +452,33 @@ export const getActiveHoCampaigns = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Create / Update HO Campaign
+ * Create / Update HO Campaign (Enforcing RBAC ho:sales:greet:manage)
  */
 export const createHoCampaign = async (req: AuthRequest, res: Response) => {
   try {
+    const roles: string[] = (req.user?.roles || []).map((r: any) => typeof r === 'string' ? r : r.name);
+    const isHoAuthorized = isGlobalUser(req) || roles.some(r => 
+      ['SUPER_ADMIN', 'HO_SALES_DIRECTOR', 'COMMERCIAL_OPS_MANAGER', 'HO_STAFF'].includes(r)
+    );
+
+    if (!isHoAuthorized) {
+      return res.status(403).json({
+        success: false,
+        message: 'RBAC Access Denied: Only Head Office Commercial leadership can broadcast greeting campaigns.'
+      });
+    }
+
     const {
       campaign_name,
       welcome_headline,
+      media_type = 'IMAGE',
+      media_url,
+      banner_image_url,
+      thumbnail_url,
       intake_questions_json,
       target_brand_priority_id,
       target_branch_scope = 'ALL_STORES',
+      target_branch_ids_json,
       start_date,
       end_date
     } = req.body;
@@ -469,23 +486,28 @@ export const createHoCampaign = async (req: AuthRequest, res: Response) => {
     const campaignId = uuidv4();
     await pool.query(`
       INSERT INTO retail_greeting_ho_campaigns (
-        id, campaign_name, welcome_headline, intake_questions_json,
-        target_brand_priority_id, target_branch_scope, start_date, end_date,
-        is_active, created_by_ho_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)
+        id, campaign_name, welcome_headline, media_type, media_url, banner_image_url, thumbnail_url,
+        intake_questions_json, target_brand_priority_id, target_branch_scope, target_branch_ids_json,
+        start_date, end_date, is_active, created_by_ho_user_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)
     `, [
       campaignId,
       campaign_name,
       welcome_headline,
+      media_type,
+      media_url || null,
+      banner_image_url || null,
+      thumbnail_url || null,
       intake_questions_json ? JSON.stringify(intake_questions_json) : null,
       target_brand_priority_id || null,
       target_branch_scope,
+      target_branch_ids_json ? JSON.stringify(target_branch_ids_json) : null,
       start_date,
       end_date,
       req.user?.id || 'ho-sales-admin'
     ]);
 
-    res.status(201).json({ success: true, message: 'HO Greeting campaign created', data: { id: campaignId } });
+    res.status(201).json({ success: true, message: 'HO Greeting campaign broadcasted successfully', data: { id: campaignId } });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to create campaign', error: error.message });
   }
@@ -506,9 +528,158 @@ export const getGreetingTerminals = async (req: AuthRequest, res: Response) => {
       params.push(targetBranchId);
     }
 
+    query += ' ORDER BY terminal_code ASC';
+
     const [rows]: any = await pool.query(query, params);
     res.json({ success: true, data: rows });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch greeting terminals', error: error.message });
+  }
+};
+
+/**
+ * Register a New Greeting Terminal Unit (RBAC: Store Manager / IT Admin)
+ */
+export const registerGreetingTerminal = async (req: AuthRequest, res: Response) => {
+  try {
+    const { branch_id, terminal_code, device_name, floor_zone, device_model, paired_setup_pin } = req.body;
+    const { targetBranchId } = await resolveBranchScope(req, branch_id);
+
+    if (!targetBranchId || !terminal_code || !device_name) {
+      return res.status(400).json({ success: false, message: 'branch_id, terminal_code, and device_name are required' });
+    }
+
+    const terminalId = uuidv4();
+    await pool.query(`
+      INSERT INTO retail_greeting_terminals (
+        id, branch_id, terminal_code, device_name, floor_zone, device_model, paired_setup_pin, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
+    `, [
+      terminalId,
+      targetBranchId,
+      terminal_code.toUpperCase().trim(),
+      device_name.trim(),
+      floor_zone || 'Main Showroom Entrance',
+      device_model || 'Apple iPad 10.9-inch',
+      paired_setup_pin || '4006'
+    ]);
+
+    res.status(201).json({
+      success: true,
+      message: 'Greeting terminal unit registered successfully',
+      data: { id: terminalId, terminal_code }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to register terminal unit', error: error.message });
+  }
+};
+
+/**
+ * Record Terminal Heartbeat Telemetry (Auto-fired every 60s by active kiosk)
+ */
+export const recordTerminalHeartbeat = async (req: AuthRequest, res: Response) => {
+  try {
+    const terminalCodeOrId = String(req.params.id);
+    const { employee_id, ip_address } = req.body;
+
+    await pool.query(`
+      UPDATE retail_greeting_terminals
+      SET 
+        last_heartbeat_at = NOW(),
+        active_greeter_id = COALESCE(?, active_greeter_id),
+        ip_address = COALESCE(?, ip_address)
+      WHERE id = ? OR terminal_code = ?
+    `, [employee_id || null, ip_address || null, terminalCodeOrId, terminalCodeOrId]);
+
+    res.json({
+      success: true,
+      message: 'Terminal heartbeat acknowledged',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to record heartbeat', error: error.message });
+  }
+};
+
+/**
+ * Get HO Sales Fleet Overview across all Showrooms & Greeting Units
+ */
+export const getFleetOverview = async (req: AuthRequest, res: Response) => {
+  try {
+    const roles: string[] = (req.user?.roles || []).map((r: any) => typeof r === 'string' ? r : r.name);
+    const isHo = isGlobalUser(req) || roles.some(r => 
+      ['SUPER_ADMIN', 'HO_SALES_DIRECTOR', 'COMMERCIAL_OPS_MANAGER', 'HO_STAFF'].includes(r)
+    );
+
+    let branchFilter = '';
+    const params: any[] = [];
+
+    // If branch-scoped manager, limit to their branch
+    if (!isHo && req.user?.branch_id) {
+      branchFilter = 'WHERE t.branch_id = ?';
+      params.push(req.user.branch_id);
+    }
+
+    const [rows]: any = await pool.query(`
+      SELECT 
+        t.id as terminal_id,
+        t.branch_id,
+        COALESCE(b.name, 'Flagship Showroom') as branch_name,
+        COALESCE(b.city, 'Bengaluru') as city,
+        COALESCE(b.state, 'Karnataka') as state,
+        t.terminal_code,
+        t.device_name,
+        t.device_model,
+        t.floor_zone,
+        t.last_heartbeat_at,
+        CASE 
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 5 MINUTE THEN 'ONLINE'
+          WHEN t.last_heartbeat_at >= NOW() - INTERVAL 60 MINUTE THEN 'STANDBY'
+          ELSE 'OFFLINE'
+        END as connectivity_status,
+        c.campaign_name as active_campaign_name,
+        c.welcome_headline,
+        c.media_type,
+        c.media_url,
+        c.banner_image_url,
+        c.thumbnail_url,
+        u.full_name as greeter_name,
+        (
+          SELECT COUNT(*) 
+          FROM retail_greeting_logs gl 
+          WHERE gl.terminal_id = t.id AND DATE(gl.greeted_at) = CURDATE()
+        ) as today_intakes_count
+      FROM retail_greeting_terminals t
+      LEFT JOIN retail_branch_master b ON t.branch_id = b.id
+      LEFT JOIN retail_greeting_ho_campaigns c ON (
+        t.active_ho_campaign_id = c.id OR 
+        (t.active_ho_campaign_id IS NULL AND c.is_active = TRUE AND CURDATE() BETWEEN c.start_date AND c.end_date)
+      )
+      LEFT JOIN imago_iam_db.users u ON t.active_greeter_id = u.id
+      ${branchFilter}
+      ORDER BY b.name ASC, t.terminal_code ASC
+    `, params);
+
+    // Compute fleet metrics
+    const totalTerminals = rows.length;
+    const onlineTerminals = rows.filter((r: any) => r.connectivity_status === 'ONLINE').length;
+    const totalIntakesToday = rows.reduce((acc: number, r: any) => acc + (Number(r.today_intakes_count) || 0), 0);
+    const uniqueBranches = new Set(rows.map((r: any) => r.branch_id)).size;
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          total_branches: uniqueBranches,
+          total_terminals: totalTerminals,
+          online_terminals: onlineTerminals,
+          offline_terminals: totalTerminals - onlineTerminals,
+          total_intakes_today: totalIntakesToday
+        },
+        fleet: rows
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch fleet overview', error: error.message });
   }
 };

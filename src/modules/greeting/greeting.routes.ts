@@ -11,7 +11,10 @@ import {
   updateQueueTokenStatus,
   getActiveHoCampaigns,
   createHoCampaign,
-  getGreetingTerminals
+  getGreetingTerminals,
+  registerGreetingTerminal,
+  recordTerminalHeartbeat,
+  getFleetOverview
 } from './greeting.controller';
 import { authenticateJwt } from '../../middleware/auth';
 
@@ -32,9 +35,14 @@ router.get('/greeting/tokens', authenticateJwt, getActiveQueueTokens);
 router.patch('/greeting/tokens/:id/call', authenticateJwt, callQueueToken);
 router.patch('/greeting/tokens/:id/status', authenticateJwt, updateQueueTokenStatus);
 
-// 4. Head Office (HO) Sales Campaigns & Terminals
+// 4. Head Office (HO) Sales Campaigns & Fleet Monitor
 router.get('/greeting/ho/campaigns', authenticateJwt, getActiveHoCampaigns);
 router.post('/greeting/ho/campaigns', authenticateJwt, createHoCampaign);
+router.get('/greeting/fleet/overview', authenticateJwt, getFleetOverview);
+
+// 5. Hardware Greeting Terminals & Heartbeat
 router.get('/greeting/terminals', authenticateJwt, getGreetingTerminals);
+router.post('/greeting/terminals', authenticateJwt, registerGreetingTerminal);
+router.post('/greeting/terminals/:id/heartbeat', authenticateJwt, recordTerminalHeartbeat);
 
 export default router;
