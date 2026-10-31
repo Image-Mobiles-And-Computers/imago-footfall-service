@@ -274,10 +274,6 @@ export const getStaffFloorPresence = async (req: AuthRequest, res: Response) => 
   try {
     const { branch_id } = req.query;
     const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
-    if (!targetBranchId) {
-      return res.status(400).json({ success: false, message: 'branch_id is required' });
-    }
-
     const presence = await PresenceService.getBranchFloorPresence(targetBranchId);
     res.json({ success: true, data: presence });
   } catch (error: any) {
@@ -435,6 +431,21 @@ export const updateQueueTokenStatus = async (req: AuthRequest, res: Response) =>
  */
 export const getActiveHoCampaigns = async (req: AuthRequest, res: Response) => {
   try {
+    const { branch_id } = req.query;
+    let branchFilter = '';
+    const params: any[] = [];
+
+    if (branch_id && branch_id !== 'ALL' && branch_id !== 'undefined' && branch_id !== 'null') {
+      branchFilter = `
+        AND (
+          c.target_branch_scope = 'ALL_STORES' OR
+          c.target_branch_ids IS NULL OR
+          JSON_CONTAINS(c.target_branch_ids, JSON_QUOTE(?))
+        )
+      `;
+      params.push(String(branch_id));
+    }
+
     const [rows]: any = await pool.query(`
       SELECT 
         c.*,
@@ -442,8 +453,9 @@ export const getActiveHoCampaigns = async (req: AuthRequest, res: Response) => {
       FROM retail_greeting_ho_campaigns c
       LEFT JOIN retail_brand_master bm ON c.target_brand_priority_id = bm.id
       WHERE c.is_active = TRUE AND CURDATE() BETWEEN c.start_date AND c.end_date
+      ${branchFilter}
       ORDER BY c.created_at DESC
-    `);
+    `, params);
 
     res.json({ success: true, data: rows });
   } catch (error: any) {
@@ -514,6 +526,80 @@ export const createHoCampaign = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * Update Existing HO Campaign or Toggle Active Status (RBAC Protected)
+ */
+export const updateHoCampaign = async (req: AuthRequest, res: Response) => {
+  try {
+    const roles: string[] = (req.user?.roles || []).map((r: any) => typeof r === 'string' ? r : r.name);
+    const isHoAuthorized = isGlobalUser(req) || roles.some(r => 
+      ['SUPER_ADMIN', 'HO_SALES_DIRECTOR', 'COMMERCIAL_OPS_MANAGER', 'HO_STAFF'].includes(r)
+    );
+
+    if (!isHoAuthorized) {
+      return res.status(403).json({
+        success: false,
+        message: 'RBAC Access Denied: Only Head Office Commercial leadership can edit broadcast campaigns.'
+      });
+    }
+
+    const campaignId = String(req.params.id);
+    const {
+      campaign_name,
+      welcome_headline,
+      media_type,
+      media_url,
+      banner_image_url,
+      thumbnail_url,
+      target_brand_priority_id,
+      target_branch_scope,
+      target_branch_ids_json,
+      start_date,
+      end_date,
+      is_active,
+      intake_questions_json
+    } = req.body;
+
+    await pool.query(`
+      UPDATE retail_greeting_ho_campaigns
+      SET
+        campaign_name = COALESCE(?, campaign_name),
+        welcome_headline = COALESCE(?, welcome_headline),
+        media_type = COALESCE(?, media_type),
+        media_url = COALESCE(?, media_url),
+        banner_image_url = COALESCE(?, banner_image_url),
+        thumbnail_url = COALESCE(?, thumbnail_url),
+        target_brand_priority_id = ?,
+        target_branch_scope = COALESCE(?, target_branch_scope),
+        target_branch_ids_json = ?,
+        start_date = COALESCE(?, start_date),
+        end_date = COALESCE(?, end_date),
+        is_active = COALESCE(?, is_active),
+        intake_questions_json = COALESCE(?, intake_questions_json)
+      WHERE id = ?
+    `, [
+      campaign_name || null,
+      welcome_headline || null,
+      media_type || null,
+      media_url || null,
+      banner_image_url || null,
+      thumbnail_url || null,
+      target_brand_priority_id !== undefined ? (target_brand_priority_id || null) : null,
+      target_branch_scope || null,
+      target_branch_ids_json !== undefined ? (JSON.stringify(target_branch_ids_json) || null) : null,
+      start_date || null,
+      end_date || null,
+      is_active !== undefined ? is_active : null,
+      intake_questions_json !== undefined ? (typeof intake_questions_json === 'string' ? intake_questions_json : JSON.stringify(intake_questions_json)) : null,
+      campaignId
+    ]);
+
+    res.json({ success: true, message: 'Broadcast campaign updated successfully' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to update campaign', error: error.message });
+  }
+};
+
+/**
  * List Greeting Terminals
  */
 export const getGreetingTerminals = async (req: AuthRequest, res: Response) => {
@@ -521,19 +607,64 @@ export const getGreetingTerminals = async (req: AuthRequest, res: Response) => {
     const { branch_id } = req.query;
     const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
 
-    let query = 'SELECT * FROM retail_greeting_terminals WHERE 1=1';
+    let query = `
+      SELECT 
+        t.*,
+        b.name as branch_name,
+        b.city,
+        b.state,
+        c.campaign_name as assigned_campaign_name,
+        c.welcome_headline as assigned_campaign_headline
+      FROM retail_greeting_terminals t
+      LEFT JOIN imago_org_db.branches b ON t.branch_id = b.id
+      LEFT JOIN retail_greeting_ho_campaigns c ON t.active_ho_campaign_id = c.id
+      WHERE 1=1
+    `;
     const params: any[] = [];
     if (targetBranchId) {
-      query += ' AND branch_id = ?';
+      query += ' AND t.branch_id = ?';
       params.push(targetBranchId);
     }
 
-    query += ' ORDER BY terminal_code ASC';
+    query += ' ORDER BY b.name ASC, t.terminal_code ASC';
 
     const [rows]: any = await pool.query(query, params);
     res.json({ success: true, data: rows });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch greeting terminals', error: error.message });
+  }
+};
+
+/**
+ * Update Terminal Unit Configuration (Campaign Assignment, Setup PIN, Hardware Details)
+ */
+export const updateGreetingTerminal = async (req: AuthRequest, res: Response) => {
+  try {
+    const terminalId = String(req.params.id);
+    const { active_ho_campaign_id, paired_setup_pin, device_name, floor_zone, device_model } = req.body;
+
+    await pool.query(`
+      UPDATE retail_greeting_terminals
+      SET
+        active_ho_campaign_id = ?,
+        paired_setup_pin = COALESCE(?, paired_setup_pin),
+        device_name = COALESCE(?, device_name),
+        floor_zone = COALESCE(?, floor_zone),
+        device_model = COALESCE(?, device_model)
+      WHERE id = ? OR terminal_code = ?
+    `, [
+      active_ho_campaign_id !== undefined ? (active_ho_campaign_id || null) : null,
+      paired_setup_pin || null,
+      device_name || null,
+      floor_zone || null,
+      device_model || null,
+      terminalId,
+      terminalId
+    ]);
+
+    res.json({ success: true, message: 'Greeting terminal configuration updated successfully' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to update terminal', error: error.message });
   }
 };
 
@@ -632,17 +763,18 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
         t.device_model,
         t.floor_zone,
         t.last_heartbeat_at,
+        t.paired_setup_pin,
         CASE 
           WHEN t.last_heartbeat_at >= NOW() - INTERVAL 5 MINUTE THEN 'ONLINE'
           WHEN t.last_heartbeat_at >= NOW() - INTERVAL 60 MINUTE THEN 'STANDBY'
           ELSE 'OFFLINE'
         END as connectivity_status,
-        c.campaign_name as active_campaign_name,
-        c.welcome_headline,
-        c.media_type,
-        c.media_url,
-        c.banner_image_url,
-        c.thumbnail_url,
+        COALESCE(tc.campaign_name, def_c.campaign_name) as active_campaign_name,
+        COALESCE(tc.welcome_headline, def_c.welcome_headline) as welcome_headline,
+        COALESCE(tc.media_type, def_c.media_type) as media_type,
+        COALESCE(tc.media_url, def_c.media_url) as media_url,
+        COALESCE(tc.banner_image_url, def_c.banner_image_url) as banner_image_url,
+        COALESCE(tc.thumbnail_url, def_c.thumbnail_url) as thumbnail_url,
         u.full_name as greeter_name,
         (
           SELECT COUNT(*) 
@@ -650,11 +782,15 @@ export const getFleetOverview = async (req: AuthRequest, res: Response) => {
           WHERE gl.terminal_id = t.id AND DATE(gl.greeted_at) = CURDATE()
         ) as today_intakes_count
       FROM retail_greeting_terminals t
-      LEFT JOIN retail_branch_master b ON t.branch_id = b.id
-      LEFT JOIN retail_greeting_ho_campaigns c ON (
-        t.active_ho_campaign_id = c.id OR 
-        (t.active_ho_campaign_id IS NULL AND c.is_active = TRUE AND CURDATE() BETWEEN c.start_date AND c.end_date)
-      )
+      LEFT JOIN imago_org_db.branches b ON t.branch_id = b.id
+      LEFT JOIN retail_greeting_ho_campaigns tc ON t.active_ho_campaign_id = tc.id
+      LEFT JOIN (
+        SELECT id, campaign_name, welcome_headline, media_type, media_url, banner_image_url, thumbnail_url
+        FROM retail_greeting_ho_campaigns
+        WHERE is_active = TRUE AND CURDATE() BETWEEN start_date AND end_date
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) def_c ON t.active_ho_campaign_id IS NULL
       LEFT JOIN imago_iam_db.users u ON t.active_greeter_id = u.id
       ${branchFilter}
       ORDER BY b.name ASC, t.terminal_code ASC

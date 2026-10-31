@@ -3,6 +3,8 @@ import { pool } from '../../config/db';
 export interface FloorStaffStatus {
   employee_id: string;
   employee_code: string;
+  branch_id: string;
+  branch_name?: string;
   full_name: string;
   designation: string;
   employment_type: string;
@@ -19,6 +21,7 @@ export interface FloorStaffStatus {
 
 export interface PresenceSummary {
   branch_id: string;
+  branch_name?: string;
   total_on_duty: number;
   available_count: number;
   engaged_count: number;
@@ -33,18 +36,27 @@ export interface PresenceSummary {
 
 export class PresenceService {
   /**
-   * Retrieves real-time floor staff presence for a branch by synthesizing
+   * Retrieves real-time floor staff presence for a branch (or all branches) by synthesizing
    * HR on-duty records with footfall floor status and active walk-in sessions.
    */
-  public static async getBranchFloorPresence(branchId: string): Promise<PresenceSummary> {
+  public static async getBranchFloorPresence(branchId?: string | null): Promise<PresenceSummary> {
     const connection = await pool.getConnection();
     try {
-      // 1. Fetch all retail employees for this branch from imago_hr_db + user identity
+      const isSpecificBranch = branchId && branchId !== 'ALL' && branchId !== 'undefined' && branchId !== 'null';
+      let branchWhere = '';
+      const params: any[] = [];
+      if (isSpecificBranch) {
+        branchWhere = 'AND e.branch_id = ?';
+        params.push(branchId);
+      }
+
+      // 1. Fetch retail employees from imago_hr_db + user identity + branch
       const [hrRows]: any = await connection.query(`
         SELECT 
           e.id as employee_id,
           e.employee_code,
           e.branch_id,
+          COALESCE(b.name, 'Showroom Branch') as branch_name,
           e.designation,
           e.employment_type,
           e.brand_partner_id,
@@ -60,11 +72,13 @@ export class PresenceService {
           TIMESTAMPDIFF(MINUTE, COALESCE(ws.engaged_at, sfs.status_updated_at, NOW()), NOW()) as elapsed_minutes
         FROM imago_hr_db.hr_employees e
         LEFT JOIN imago_iam_db.users u ON e.user_id = u.id
+        LEFT JOIN imago_org_db.branches b ON e.branch_id = b.id
         LEFT JOIN imago_hr_db.hr_brand_partners bp ON e.brand_partner_id = bp.id
         LEFT JOIN retail_staff_floor_status sfs ON e.id = sfs.employee_id
         LEFT JOIN retail_walkin_sessions ws ON sfs.current_walkin_session_id = ws.id AND ws.status = 'ENGAGED'
-        WHERE e.branch_id = ? AND e.division = 'RETAIL' AND e.status = 'ACTIVE'
+        WHERE e.division = 'RETAIL' AND e.status = 'ACTIVE' ${branchWhere}
         ORDER BY 
+          b.name ASC,
           CASE 
             WHEN e.employment_type = 'BRAND_PROMOTER' THEN 1
             WHEN e.designation LIKE '%Sales%' THEN 2
@@ -72,7 +86,7 @@ export class PresenceService {
             ELSE 4
           END,
           u.full_name ASC
-      `, [branchId]);
+      `, params);
 
       const staffList: FloorStaffStatus[] = hrRows.map((r: any) => {
         let status = r.current_status || 'AVAILABLE';
@@ -84,6 +98,8 @@ export class PresenceService {
         return {
           employee_id: r.employee_id,
           employee_code: r.employee_code || 'EMP',
+          branch_id: r.branch_id,
+          branch_name: r.branch_name,
           full_name: r.full_name || 'Staff Member',
           designation: r.designation || 'Sales Associate',
           employment_type: r.employment_type || 'FULL_TIME_INTERNAL',
@@ -122,7 +138,8 @@ export class PresenceService {
       ).length;
 
       return {
-        branch_id: branchId,
+        branch_id: branchId || 'ALL',
+        branch_name: isSpecificBranch ? (staffList[0]?.branch_name || 'Showroom Branch') : 'All Showrooms',
         total_on_duty: staffList.length,
         available_count: available.length,
         engaged_count: engaged.length,
