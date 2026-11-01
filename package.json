@@ -14,7 +14,8 @@
     "db:seed:categories": "tsx src/database/seeds/seed-footfall-taxonomies.ts --categories-only",
     "db:seed:taxonomies": "tsx src/database/seeds/seed-footfall-taxonomies.ts --taxonomies-only",
     "db:seed:products": "tsx src/database/seeds/seed-footfall-taxonomies.ts --products-only",
-    "db:seed:sample": "tsx src/database/seeds/seed-footfall-taxonomies.ts --sample-data-only"
+    "db:seed:sample": "tsx src/database/seeds/seed-footfall-taxonomies.ts --sample-data-only",
+    "db:seed:kiosk": "tsx src/database/seeds/seed-kiosk-3d-comparison.ts"
   },
   "repository": {
     "type": "git",

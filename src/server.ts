@@ -7,6 +7,7 @@ import walkinRoutes from './modules/walkin/walkin.routes';
 import webhookRoutes from './modules/webhook/pos-webhook.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
 import greetingRoutes from './modules/greeting/greeting.routes';
+import kioskRoutes from './modules/kiosk/kiosk.routes';
 
 dotenv.config();
 
@@ -44,6 +45,8 @@ app.use('/api/footfall', walkinRoutes);
 app.use('/api/footfall', webhookRoutes);
 app.use('/api/footfall', analyticsRoutes);
 app.use('/api/footfall', greetingRoutes);
+app.use('/api/footfall', kioskRoutes);
+app.use('/api', kioskRoutes);
 
 const server = app.listen(PORT, async () => {
   console.log(`=======================================================`);
