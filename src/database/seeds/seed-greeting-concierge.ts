@@ -65,7 +65,7 @@ export async function seedGreetingConcierge(): Promise<void> {
       ])
     ]);
 
-    // 3. Seed Terminals
+    // 3. Seed Terminals (Multi-terminal support: Indiranagar Flagship has 3 tables)
     const terminals = [
       {
         id: 'term-indira-01',
@@ -75,6 +75,24 @@ export async function seedGreetingConcierge(): Promise<void> {
         ip_address: '192.168.10.150',
         ho_fleet_group: 'FLAGSHIP_STORES',
         active_ho_campaign_id: campaignId1
+      },
+      {
+        id: 'term-indira-02',
+        branch_id: indiranagarId,
+        terminal_code: 'IND-GREET-02',
+        device_name: '1st Floor Computing Concierge iPad',
+        ip_address: '192.168.10.151',
+        ho_fleet_group: 'FLAGSHIP_STORES',
+        active_ho_campaign_id: campaignId1
+      },
+      {
+        id: 'term-indira-03',
+        branch_id: indiranagarId,
+        terminal_code: 'IND-GREET-03',
+        device_name: 'Service Reception & Trade-In Desk',
+        ip_address: '192.168.10.152',
+        ho_fleet_group: 'FLAGSHIP_STORES',
+        active_ho_campaign_id: campaignId2
       },
       {
         id: 'term-kora-01',
