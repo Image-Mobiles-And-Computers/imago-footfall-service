@@ -268,3 +268,101 @@ export async function recordTerminalHeartbeat(req: Request, res: Response): Prom
     res.status(500).json({ success: false, error: err.message });
   }
 }
+
+// ── Product Master & Specs Governance CRUD Controllers ─────────
+
+export async function getAllProductsController(req: Request, res: Response): Promise<void> {
+  try {
+    const category = req.query.category as string | undefined;
+    const brand = req.query.brand as string | undefined;
+    const search = req.query.search as string | undefined;
+    const includeInactive = req.query.includeInactive === 'true' || req.query.include_inactive === 'true';
+
+    const products = await KioskService.getAllProducts({ category, brand, search, includeInactive });
+    res.json({
+      success: true,
+      count: products.length,
+      data: products,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+export async function getProductBySkuController(req: Request, res: Response): Promise<void> {
+  try {
+    const sku = String(req.params.sku);
+    const product = await KioskService.getProductBySku(sku);
+    if (!product) {
+      res.status(404).json({ success: false, error: `Product with SKU ${sku} not found.` });
+      return;
+    }
+    res.json({ success: true, data: product });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+export async function createProductController(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.body.modelName && !req.body.model_name) {
+      res.status(400).json({ success: false, error: 'Product modelName is required.' });
+      return;
+    }
+    const created = await KioskService.createProduct(req.body);
+    res.status(201).json({
+      success: true,
+      message: `Product ${created.modelName} (${created.sku}) successfully registered into showroom catalog.`,
+      data: created
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+export async function updateProductController(req: Request, res: Response): Promise<void> {
+  try {
+    const sku = String(req.params.sku);
+    const updated = await KioskService.updateProduct(sku, req.body);
+    res.json({
+      success: true,
+      message: `Product ${updated.modelName} specifications and commercial pricing updated.`,
+      data: updated
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+export async function deleteProductController(req: Request, res: Response): Promise<void> {
+  try {
+    const sku = String(req.params.sku);
+    const hardDelete = req.query.hardDelete === 'true';
+    const deleted = await KioskService.deleteProduct(sku, hardDelete);
+    if (!deleted) {
+      res.status(404).json({ success: false, error: `Product with SKU ${sku} not found or already deactivated.` });
+      return;
+    }
+    res.json({
+      success: true,
+      message: hardDelete ? `Product ${sku} permanently purged.` : `Product ${sku} deactivated from kiosk showroom display.`
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+export async function getKioskCategoriesController(req: Request, res: Response): Promise<void> {
+  try {
+    const categories = await KioskService.getKioskCategories();
+    res.json({
+      success: true,
+      data: categories
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+

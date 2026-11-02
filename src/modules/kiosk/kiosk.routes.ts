@@ -17,17 +17,32 @@ import {
   getHoCampaigns,
   getFleetOverview,
   dispatchRemoteCommand,
-  recordTerminalHeartbeat
+  recordTerminalHeartbeat,
+  getAllProductsController,
+  getProductBySkuController,
+  createProductController,
+  updateProductController,
+  deleteProductController,
+  getKioskCategoriesController
 } from './kiosk.controller';
 import { optionalAuthenticateJwt, authenticateJwt } from '../../middleware/auth';
 
 const router = Router();
 
 // 1. Digital Showroom Catalog & Multi-Device Comparison
+router.get('/kiosk/categories', optionalAuthenticateJwt, getKioskCategoriesController);
 router.get('/kiosk/catalog', optionalAuthenticateJwt, getCatalog);
 router.get('/kiosk/compare', optionalAuthenticateJwt, compareModels);
 router.get('/kiosk/models/3d/:sku', optionalAuthenticateJwt, get3DModelBySku);
 router.get('/kiosk/inventory/pricing', optionalAuthenticateJwt, getInventoryPricing);
+
+// 1b. Retail Catalog Governance & Product Master (Admin & Sales)
+router.get('/kiosk/products', optionalAuthenticateJwt, getAllProductsController);
+router.get('/kiosk/products/:sku', optionalAuthenticateJwt, getProductBySkuController);
+router.post('/kiosk/products', optionalAuthenticateJwt, createProductController);
+router.put('/kiosk/products/:sku', optionalAuthenticateJwt, updateProductController);
+router.delete('/kiosk/products/:sku', optionalAuthenticateJwt, deleteProductController);
+
 
 // 2. Interactive Session & Dwell Telemetry
 router.post('/kiosk/sessions', optionalAuthenticateJwt, startSession);

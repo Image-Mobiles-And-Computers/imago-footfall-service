@@ -10,6 +10,7 @@ import {
   callQueueToken,
   updateQueueTokenStatus,
   getActiveHoCampaigns,
+  getGreetingBroadcastStatus,
   createHoCampaign,
   updateHoCampaign,
   getGreetingTerminals,
@@ -41,6 +42,7 @@ router.patch('/greeting/tokens/:id/call', authenticateJwt, callQueueToken);
 router.patch('/greeting/tokens/:id/status', authenticateJwt, updateQueueTokenStatus);
 
 // 4. Head Office (HO) Sales Campaigns & Fleet Monitor
+router.get('/greeting/broadcast/status', optionalAuthenticateJwt, getGreetingBroadcastStatus);
 router.get('/greeting/ho/campaigns', optionalAuthenticateJwt, getActiveHoCampaigns);
 router.post('/greeting/ho/campaigns', authenticateJwt, createHoCampaign);
 router.put('/greeting/ho/campaigns/:id', authenticateJwt, updateHoCampaign);

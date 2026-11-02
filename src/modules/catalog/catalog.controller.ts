@@ -127,10 +127,16 @@ export const deleteBrand = async (req: Request, res: Response) => {
 
 export const getCategories = async (req: Request, res: Response) => {
   try {
-    const { include_inactive } = req.query;
-    let query = 'SELECT * FROM retail_category_master';
+    const { include_inactive, kiosk_only, catalog_only } = req.query;
+    let query = 'SELECT * FROM retail_category_master WHERE 1=1';
     if (!include_inactive || include_inactive !== 'true') {
-      query += ' WHERE is_active = TRUE';
+      query += ' AND is_active = TRUE';
+    }
+    if (kiosk_only === 'true') {
+      query += ' AND is_allowed_in_kiosk = TRUE';
+    }
+    if (catalog_only === 'true') {
+      query += ' AND is_allowed_in_catalog = TRUE';
     }
     query += ' ORDER BY display_order ASC, name ASC';
 
@@ -143,16 +149,24 @@ export const getCategories = async (req: Request, res: Response) => {
 
 export const createCategory = async (req: Request, res: Response) => {
   try {
-    const { code, name, icon, display_order } = req.body;
+    const { code, name, icon, display_order, is_allowed_in_kiosk, is_allowed_in_catalog } = req.body;
     if (!code || !name) {
       return res.status(400).json({ success: false, message: 'Category code and name are required' });
     }
 
     const id = uuidv4();
     await pool.query(
-      `INSERT INTO retail_category_master (id, code, name, icon, display_order, is_active)
-       VALUES (?, UPPER(?), ?, ?, ?, TRUE)`,
-      [id, code.trim(), name.trim(), icon || 'Tag', display_order || 0]
+      `INSERT INTO retail_category_master (id, code, name, icon, display_order, is_active, is_allowed_in_kiosk, is_allowed_in_catalog)
+       VALUES (?, UPPER(?), ?, ?, ?, TRUE, ?, ?)`,
+      [
+        id,
+        code.trim(),
+        name.trim(),
+        icon || 'Tag',
+        display_order || 0,
+        is_allowed_in_kiosk !== undefined ? Boolean(is_allowed_in_kiosk) : false,
+        is_allowed_in_catalog !== undefined ? Boolean(is_allowed_in_catalog) : true
+      ]
     );
 
     const [created]: any = await pool.query('SELECT * FROM retail_category_master WHERE id = ?', [id]);
@@ -168,7 +182,7 @@ export const createCategory = async (req: Request, res: Response) => {
 export const updateCategory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, icon, display_order, is_active } = req.body;
+    const { name, icon, display_order, is_active, is_allowed_in_kiosk, is_allowed_in_catalog } = req.body;
 
     const [existing]: any = await pool.query('SELECT * FROM retail_category_master WHERE id = ?', [id]);
     if (!existing[0]) {
@@ -180,9 +194,19 @@ export const updateCategory = async (req: Request, res: Response) => {
        SET name = COALESCE(?, name),
            icon = COALESCE(?, icon),
            display_order = COALESCE(?, display_order),
-           is_active = COALESCE(?, is_active)
+           is_active = COALESCE(?, is_active),
+           is_allowed_in_kiosk = COALESCE(?, is_allowed_in_kiosk),
+           is_allowed_in_catalog = COALESCE(?, is_allowed_in_catalog)
        WHERE id = ?`,
-      [name, icon, display_order, is_active, id]
+      [
+        name,
+        icon,
+        display_order,
+        is_active,
+        is_allowed_in_kiosk !== undefined ? Boolean(is_allowed_in_kiosk) : null,
+        is_allowed_in_catalog !== undefined ? Boolean(is_allowed_in_catalog) : null,
+        id
+      ]
     );
 
     if (name && name !== existing[0].name) {

@@ -466,6 +466,80 @@ export const getActiveHoCampaigns = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * Real-Time Greeting Broadcast Live Synchronization Status Endpoint
+ * Returns lightweight signature based on active campaigns and terminal assignment.
+ * Enables physical greeting tablets to detect backend updates in < 8s without heavy payloads.
+ */
+export const getGreetingBroadcastStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const { branch_id, terminal_code, client_signature } = req.query;
+
+    let activeCampaignId: string | null = null;
+    let terminalUpdatedTs: number = 0;
+
+    if (terminal_code) {
+      const [termRows]: any = await pool.query(
+        `SELECT active_ho_campaign_id, UNIX_TIMESTAMP(COALESCE(updated_at, created_at)) as term_ts 
+         FROM retail_greeting_terminals 
+         WHERE terminal_code = ? LIMIT 1`,
+        [String(terminal_code)]
+      );
+      if (termRows.length > 0) {
+        activeCampaignId = termRows[0].active_ho_campaign_id || null;
+        terminalUpdatedTs = termRows[0].term_ts || 0;
+      }
+    }
+
+    let branchFilter = '';
+    const params: any[] = [];
+    if (branch_id && branch_id !== 'ALL' && branch_id !== 'undefined' && branch_id !== 'null') {
+      branchFilter = `
+        AND (
+          c.target_branch_scope = 'ALL_STORES' OR
+          c.target_branch_ids_json IS NULL OR
+          JSON_CONTAINS(c.target_branch_ids_json, JSON_QUOTE(?))
+        )
+      `;
+      params.push(String(branch_id));
+    }
+
+    const [campRows]: any = await pool.query(`
+      SELECT 
+        COUNT(*) as total_active,
+        COALESCE(MAX(UNIX_TIMESTAMP(COALESCE(c.updated_at, c.created_at))), 0) as max_camp_ts
+      FROM retail_greeting_ho_campaigns c
+      WHERE c.is_active = TRUE 
+        AND (c.start_date IS NULL OR c.start_date <= CURDATE())
+        AND (c.end_date IS NULL OR c.end_date >= CURDATE())
+      ${branchFilter}
+    `, params);
+
+    const totalActive = campRows[0]?.total_active || 0;
+    const maxCampTs = campRows[0]?.max_camp_ts || 0;
+
+    const serverSignature = `sig_c${totalActive}_ts${maxCampTs}_t${terminalUpdatedTs}_a${activeCampaignId || 'none'}`;
+
+    if (client_signature && client_signature === serverSignature) {
+      return res.json({
+        success: true,
+        changed: false,
+        signature: serverSignature
+      });
+    }
+
+    return res.json({
+      success: true,
+      changed: true,
+      signature: serverSignature,
+      active_ho_campaign_id: activeCampaignId,
+      campaign_count: totalActive
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to retrieve broadcast status', error: error.message });
+  }
+};
+
+/**
  * Create / Update HO Campaign (Enforcing RBAC ho:sales:greet:manage)
  */
 export const createHoCampaign = async (req: AuthRequest, res: Response) => {
