@@ -3,6 +3,7 @@ import { pool } from '../../config/db';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthRequest } from '../../middleware/auth';
 import { resolveBranchScope, isGlobalUser } from '../../middleware/rbacScope';
+import { salesCommandService } from '../sales-command/sales.service';
 
 export const createWalkIn = async (req: AuthRequest, res: Response) => {
   const connection = await pool.getConnection();
@@ -106,9 +107,29 @@ export const getActiveWalkIns = async (req: AuthRequest, res: Response) => {
              CASE 
                WHEN s.status = 'ENTERED' AND TIMESTAMPDIFF(MINUTE, s.entered_at, NOW()) >= 5 THEN TRUE 
                ELSE FALSE 
-             END as is_unassisted_alert
+             END as is_unassisted_alert,
+             t.ticket_number as ho_ticket_number,
+             t.requested_discount as ho_requested_discount,
+             t.approved_discount as ho_approved_discount,
+             t.authorization_code as ho_authorization_code,
+             t.status as ho_ticket_status,
+             t.product_name as ho_product_name,
+             t.product_sku as ho_product_sku,
+             t.mrp as ho_mrp,
+             t.discount_reason as ho_discount_reason,
+             GREATEST(0, TIMESTAMPDIFF(SECOND, NOW(), t.expires_at)) as ho_sla_remaining_seconds
       FROM retail_walkin_sessions s
-      WHERE s.status IN ('ENTERED', 'ENGAGED', 'CHECKOUT_INITIATED')
+      LEFT JOIN (
+        SELECT t1.*
+        FROM ho_price_exception_requests t1
+        INNER JOIN (
+          SELECT walkin_session_id, MAX(created_at) as max_created
+          FROM ho_price_exception_requests
+          WHERE walkin_session_id IS NOT NULL
+          GROUP BY walkin_session_id
+        ) t2 ON t1.walkin_session_id = t2.walkin_session_id AND t1.created_at = t2.max_created
+      ) t ON s.id = t.walkin_session_id
+      WHERE s.status IN ('ENTERED', 'ENGAGED', 'PENDING_SALES_COMMAND', 'CHECKOUT_INITIATED')
     `;
     const params: any[] = [];
 
@@ -303,6 +324,12 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
       [id]
     );
 
+    // Normalize legacy HQ corporate ID to Indiranagar Flagship showroom
+    let targetBranch = session.branch_id;
+    if (targetBranch === '1aea7937-4abc-4bb3-bb48-283172b49b8c') {
+      targetBranch = 'c9832255-2791-401d-88b5-a3d2c870c533';
+    }
+
     // Record conversion
     await connection.query(
       `INSERT INTO retail_conversions (
@@ -311,7 +338,7 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
       ) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         id,
-        session.branch_id,
+        targetBranch,
         invoice_number,
         invoice_amount,
         payment_method || 'UPI',
@@ -326,6 +353,19 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
        VALUES (UUID(), ?, ?, 'CONVERTED', ?, ?)`,
       [id, session.status, req.user?.id || null, `Manually linked to Invoice #${invoice_number}`]
     );
+
+    // Real-time Head Office Sales Command pacing update
+    try {
+      const unitsCount = Array.isArray(sold_skus) && sold_skus.length > 0 ? sold_skus.length : 1;
+      await salesCommandService.recordRetailSaleConversion(
+        targetBranch,
+        Number(invoice_amount),
+        unitsCount,
+        connection
+      );
+    } catch (pacingErr) {
+      console.error('[Manual Convert] Failed to update HO sales pacing:', pacingErr);
+    }
 
     await connection.commit();
     res.json({ success: true, message: 'Walk-in session converted successfully' });

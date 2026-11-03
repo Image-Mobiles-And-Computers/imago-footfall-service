@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { pool } from '../../config/db';
 import { v4 as uuidv4 } from 'uuid';
+import { salesCommandService } from '../sales-command/sales.service';
 
 export const handlePosWebhook = async (req: Request, res: Response) => {
   const connection = await pool.getConnection();
@@ -23,6 +24,12 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
         success: false,
         message: 'branch_id, invoice_number, and invoice_amount are required'
       });
+    }
+
+    // Normalize legacy HQ corporate ID to Indiranagar Flagship showroom
+    let effectiveBranchId = branch_id;
+    if (effectiveBranchId === '1aea7937-4abc-4bb3-bb48-283172b49b8c') {
+      effectiveBranchId = 'c9832255-2791-401d-88b5-a3d2c870c533';
     }
 
     await connection.beginTransaction();
@@ -54,7 +61,7 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
          FROM retail_walkin_sessions
          WHERE branch_id = ?
            AND customer_phone = ?
-           AND status IN ('ENTERED', 'ENGAGED', 'CHECKOUT_INITIATED')
+           AND status IN ('ENTERED', 'ENGAGED', 'PENDING_SALES_COMMAND', 'CHECKOUT_INITIATED')
          ORDER BY entered_at DESC
          LIMIT 1`,
         [branch_id, cleanPhone]
@@ -111,7 +118,7 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
       [
         conversionId,
         targetSessionId,
-        branch_id,
+        effectiveBranchId,
         invoice_number,
         invoice_amount,
         payment_method || 'UPI',
@@ -131,6 +138,36 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
         `Reconciled automatically with POS Invoice #${invoice_number} (₹${invoice_amount})`
       ]
     );
+
+    // 6. Real-time Head Office Sales Command pacing update
+    try {
+      const unitsCount = Array.isArray(sold_skus) && sold_skus.length > 0 ? sold_skus.length : 1;
+      await salesCommandService.recordRetailSaleConversion(
+        effectiveBranchId,
+        Number(invoice_amount),
+        unitsCount,
+        connection
+      );
+    } catch (pacingErr) {
+      console.error('[POS Webhook] Failed to update HO sales pacing:', pacingErr);
+    }
+
+    // 7. Stamp remote price exception ticket if discount authorization code or ticket ID was linked
+    try {
+      const discountTicketId = req.body.discount_ticket_id || null;
+      const authCode = req.body.authorization_code || null;
+      if (discountTicketId || authCode || targetSessionId) {
+        await connection.query(
+          `UPDATE ho_price_exception_requests
+           SET converted_invoice_number = ?
+           WHERE (id = ? OR authorization_code = ? OR (walkin_session_id = ? AND status = 'APPROVED'))
+             AND converted_invoice_number IS NULL`,
+          [invoice_number, discountTicketId, authCode, targetSessionId]
+        );
+      }
+    } catch (ticketErr) {
+      console.warn('[POS Webhook] Could not stamp ho_price_exception_requests:', ticketErr);
+    }
 
     await connection.commit();
 

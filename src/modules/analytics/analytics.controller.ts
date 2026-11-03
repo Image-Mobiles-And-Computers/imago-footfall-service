@@ -24,7 +24,7 @@ export const getBranchLiveMetrics = async (req: AuthRequest, res: Response) => {
          COUNT(*) as total_walkins,
          SUM(CASE WHEN s.status = 'CONVERTED' THEN 1 ELSE 0 END) as conversions,
          SUM(CASE WHEN s.status = 'LOST' THEN 1 ELSE 0 END) as lost_opportunities,
-         SUM(CASE WHEN s.status IN ('ENTERED', 'ENGAGED', 'CHECKOUT_INITIATED') THEN 1 ELSE 0 END) as active_on_floor,
+         SUM(CASE WHEN s.status IN ('ENTERED', 'ENGAGED', 'PENDING_SALES_COMMAND', 'CHECKOUT_INITIATED') THEN 1 ELSE 0 END) as active_on_floor,
          ROUND(AVG(CASE WHEN s.dwell_duration_seconds IS NOT NULL THEN s.dwell_duration_seconds / 60 ELSE NULL END), 1) as avg_dwell_minutes
        FROM retail_walkin_sessions s
        ${whereClause}`,
