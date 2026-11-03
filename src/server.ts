@@ -8,6 +8,7 @@ import webhookRoutes from './modules/webhook/pos-webhook.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
 import greetingRoutes from './modules/greeting/greeting.routes';
 import kioskRoutes from './modules/kiosk/kiosk.routes';
+import salesRoutes from './modules/sales-command/sales.routes';
 
 dotenv.config();
 
@@ -47,6 +48,12 @@ app.use('/api/footfall', analyticsRoutes);
 app.use('/api/footfall', greetingRoutes);
 app.use('/api/footfall', kioskRoutes);
 app.use('/api', kioskRoutes);
+
+// Head Office Commercial Sales Command (Domain 9)
+app.use('/api/footfall/sales', salesRoutes);
+app.use('/api/sales', salesRoutes);
+app.use('/api/ho/sales', salesRoutes);
+
 
 const server = app.listen(PORT, async () => {
   console.log(`=======================================================`);
