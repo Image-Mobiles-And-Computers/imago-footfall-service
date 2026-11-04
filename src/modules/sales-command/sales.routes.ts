@@ -12,6 +12,8 @@ router.get('/pacing', (req, res) => salesCommandController.getPacing(req, res));
 
 // OEM Brand Contracts & Rebates
 router.get('/oem-rebates', (req, res) => salesCommandController.getOemRebates(req, res));
+router.get('/oem-rebates/promoter-productivity', (req, res) => salesCommandController.getPromoterProductivity(req, res));
+router.post('/oem-rebates/contracts', (req, res) => salesCommandController.createOemContract(req, res));
 
 // Remote Price Exception & Discount Approval Tickets (<60s SLA)
 router.post('/discount-tickets', (req, res) => salesCommandController.createTicket(req, res));

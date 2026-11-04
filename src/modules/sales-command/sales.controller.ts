@@ -65,16 +65,39 @@ export class SalesCommandController {
   async getOemRebates(req: Request, res: Response) {
     try {
       const fiscalQuarter = (req.query.fiscal_quarter as string) || '2026-Q4';
-      const contracts = await salesCommandService.getOemRebateContracts(fiscalQuarter);
+      const data = await salesCommandService.getOemRebatesDashboard(fiscalQuarter);
       res.json({
         success: true,
-        data: {
-          fiscal_quarter: fiscalQuarter,
-          contracts
-        }
+        data
       });
     } catch (error: any) {
       console.error('[SalesCommandController] Error fetching OEM contracts:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getPromoterProductivity(req: Request, res: Response) {
+    try {
+      const data = await salesCommandService.getPromoterProductivity();
+      res.json({
+        success: true,
+        data
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error fetching promoter productivity:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async createOemContract(req: Request, res: Response) {
+    try {
+      const result = await salesCommandService.createOemContract(req.body);
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error saving OEM contract:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   }

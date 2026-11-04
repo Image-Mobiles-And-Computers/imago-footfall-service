@@ -110,11 +110,22 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
 
     // 4. Record converted sale in retail_conversions
     const conversionId = uuidv4();
+    const hasWarrantyAttach = Boolean(
+      req.body.has_warranty_attach || 
+      (Array.isArray(sold_skus) && sold_skus.some((s: any) => s.warranty_attached || /care|warranty|applecare/i.test(s.name || '')))
+    );
+    const brandName = req.body.brand_name || (
+      Array.isArray(sold_skus) && sold_skus.length > 0
+        ? (/iphone|macbook|ipad|apple/i.test(sold_skus[0].name) ? 'Apple India' : /galaxy|samsung/i.test(sold_skus[0].name) ? 'Samsung Electronics' : /oneplus/i.test(sold_skus[0].name) ? 'OnePlus' : null)
+        : null
+    );
+    const productSku = req.body.product_sku || (Array.isArray(sold_skus) && sold_skus[0]?.sku ? sold_skus[0].sku : null);
+
     await connection.query(
       `INSERT INTO retail_conversions (
         id, session_id, branch_id, invoice_number, invoice_amount, payment_method,
-        sales_employee_id, sales_employee_name, sold_skus, converted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        sales_employee_id, sales_employee_name, sold_skus, has_warranty_attach, brand_name, product_sku, converted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         conversionId,
         targetSessionId,
@@ -124,7 +135,10 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
         payment_method || 'UPI',
         sales_employee_id || null,
         sales_employee_name || null,
-        JSON.stringify(sold_skus || [])
+        JSON.stringify(sold_skus || []),
+        hasWarrantyAttach ? 1 : 0,
+        brandName,
+        productSku
       ]
     );
 

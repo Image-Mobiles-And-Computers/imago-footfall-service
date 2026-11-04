@@ -330,12 +330,16 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
       targetBranch = 'c9832255-2791-401d-88b5-a3d2c870c533';
     }
 
+    const hasWarrantyAttach = Boolean(req.body.has_warranty_attach);
+    const brandName = req.body.brand_name || null;
+    const productSku = req.body.product_sku || null;
+
     // Record conversion
     await connection.query(
       `INSERT INTO retail_conversions (
         id, session_id, branch_id, invoice_number, invoice_amount, payment_method,
-        sales_employee_id, sales_employee_name, sold_skus, converted_at
-      ) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        sales_employee_id, sales_employee_name, sold_skus, has_warranty_attach, brand_name, product_sku, converted_at
+      ) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         id,
         targetBranch,
@@ -344,7 +348,10 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
         payment_method || 'UPI',
         req.user?.id || session.assigned_employee_id,
         req.user?.full_name || session.assigned_employee_name,
-        JSON.stringify(sold_skus || [])
+        JSON.stringify(sold_skus || []),
+        hasWarrantyAttach ? 1 : 0,
+        brandName,
+        productSku
       ]
     );
 
