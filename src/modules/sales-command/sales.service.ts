@@ -672,7 +672,7 @@ export class SalesCommandService {
   async decideDiscountTicket(
     ticketId: string,
     decision: {
-      action: 'APPROVE' | 'COUNTER_OFFER' | 'REJECT';
+      action: 'APPROVE' | 'COUNTER_OFFER' | 'REJECT' | 'CANCEL';
       approved_discount?: number;
       counter_bundle_notes?: string;
       reviewed_by_user_id?: string;
@@ -703,6 +703,10 @@ export class SalesCommandService {
       finalDiscount = Number(decision.approved_discount) || 0;
       authCode = `CTR-${Math.floor(1000 + Math.random() * 9000)}-HO`;
       counterNotes = decision.counter_bundle_notes || 'Counter offer bundle attached';
+    } else if (decision.action === 'CANCEL') {
+      newStatus = 'CANCELLED';
+      finalDiscount = 0;
+      counterNotes = decision.counter_bundle_notes || 'Concession request cancelled by store representative.';
     } else {
       newStatus = 'REJECTED';
       finalDiscount = 0;
@@ -736,7 +740,7 @@ export class SalesCommandService {
           `UPDATE retail_walkin_sessions SET status = 'CHECKOUT_INITIATED' WHERE id = ?`,
           [currentTicket.walkin_session_id]
         );
-      } else if (decision.action === 'REJECT') {
+      } else if (decision.action === 'REJECT' || decision.action === 'CANCEL') {
         await pool.query(
           `UPDATE retail_walkin_sessions SET status = 'ENGAGED' WHERE id = ?`,
           [currentTicket.walkin_session_id]
@@ -745,6 +749,51 @@ export class SalesCommandService {
     }
 
     return this.getTicketById(ticketId);
+  }
+
+  /**
+   * Cancel an active or pending price exception ticket and roll back session status to ENGAGED
+   */
+  async cancelDiscountTicket(
+    ticketIdOrNumberOrSession: string,
+    reason?: string,
+    cancelledBy: string = 'STORE-ASSOCIATE'
+  ): Promise<DiscountTicketDTO> {
+    const [ticketRows]: any = await pool.query(
+      `SELECT * FROM ho_price_exception_requests 
+       WHERE id = ? OR ticket_number = ? OR (walkin_session_id = ? AND status IN ('PENDING', 'EXPIRED_ESCALATED'))
+       ORDER BY created_at DESC LIMIT 1`,
+      [ticketIdOrNumberOrSession, ticketIdOrNumberOrSession, ticketIdOrNumberOrSession]
+    );
+    if (!ticketRows || ticketRows.length === 0) {
+      throw new Error(`Ticket or session ${ticketIdOrNumberOrSession} not found`);
+    }
+
+    const currentTicket = ticketRows[0];
+    const cancellationNotes = reason || 'Concession request cancelled by store representative.';
+
+    await pool.query(
+      `UPDATE ho_price_exception_requests
+       SET 
+         status = 'CANCELLED',
+         counter_bundle_notes = ?,
+         reviewed_by_user_id = ?,
+         reviewed_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [cancellationNotes, cancelledBy, currentTicket.id]
+    );
+
+    // Roll back linked walk-in session to ENGAGED (In Service)
+    if (currentTicket.walkin_session_id) {
+      await pool.query(
+        `UPDATE retail_walkin_sessions
+         SET status = 'ENGAGED'
+         WHERE id = ? AND status = 'PENDING_SALES_COMMAND'`,
+        [currentTicket.walkin_session_id]
+      );
+    }
+
+    return this.getTicketById(currentTicket.id);
   }
 
   private formatTicketDTO(r: any): DiscountTicketDTO {

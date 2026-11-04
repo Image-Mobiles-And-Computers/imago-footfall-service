@@ -201,6 +201,25 @@ export class SalesCommandController {
     }
   }
 
+  async cancelTicket(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const { reason } = req.body;
+      const cancelledBy = (req as any).user?.name || (req as any).user?.id || 'STORE-ASSOCIATE';
+
+      const ticket = await salesCommandService.cancelDiscountTicket(id, reason, cancelledBy);
+
+      res.json({
+        success: true,
+        message: `Ticket ${ticket.ticket_number} cancelled and walk-in session returned to In Service`,
+        data: ticket
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error cancelling ticket:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   async getActiveWalkins(req: Request, res: Response) {
     try {
       const branchId = req.query.branch_id ? String(req.query.branch_id) : undefined;

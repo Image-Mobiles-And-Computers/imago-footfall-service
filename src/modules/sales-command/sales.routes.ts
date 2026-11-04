@@ -19,6 +19,8 @@ router.get('/discount-tickets/pending', (req, res) => salesCommandController.get
 router.get('/discount-tickets/resolved', (req, res) => salesCommandController.getResolvedTickets(req, res));
 router.get('/discount-tickets/session/:sessionId', (req, res) => salesCommandController.getTicketBySession(req, res));
 router.patch('/discount-tickets/:id/decide', (req, res) => salesCommandController.decideTicket(req, res));
+router.post('/discount-tickets/:id/cancel', (req, res) => salesCommandController.cancelTicket(req, res));
+router.patch('/discount-tickets/:id/cancel', (req, res) => salesCommandController.cancelTicket(req, res));
 // Active Showroom Walk-in Sessions (For Live Concession Linkage)
 router.get('/active-walkins', (req, res) => salesCommandController.getActiveWalkins(req, res));
 
