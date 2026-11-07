@@ -119,6 +119,37 @@ export class SalesCommandController {
     }
   }
 
+  // ── Brand Specialists & Promoter Assignments ────────────────────────
+  async getBrandSpecialists(req: Request, res: Response) {
+    try {
+      const branchId = req.query.branch_id ? String(req.query.branch_id) : undefined;
+      const brandId = req.query.brand_id ? String(req.query.brand_id) : undefined;
+      const specialists = await salesCommandService.getBrandSpecialists({ branch_id: branchId, brand_id: brandId });
+      res.json({
+        success: true,
+        data: specialists
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error fetching brand specialists:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async updateBrandSpecialist(req: Request, res: Response) {
+    try {
+      const employeeId = String(req.params.employeeId);
+      const updated = await salesCommandService.updateBrandSpecialistAssignment(employeeId, req.body);
+      res.json({
+        success: true,
+        message: 'Employee brand partner assignment updated successfully',
+        data: updated
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error updating brand specialist assignment:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   // ── Remote Price Exception & Discount Approval Tickets (<60s SLA) ───
   async createTicket(req: Request, res: Response) {
     try {
@@ -271,6 +302,181 @@ export class SalesCommandController {
       });
     } catch (error: any) {
       console.error('[SalesCommandController] Error fetching active walkins:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  // ==============================================================================
+  // PHASE 17.5: SPIFF BOOSTER CAMPAIGNS & LEADERBOARD CONTROLLER METHODS
+  // ==============================================================================
+
+  async getSpiffs(req: Request, res: Response) {
+    try {
+      const campaigns = await salesCommandService.getSpiffCampaigns();
+      res.json({
+        success: true,
+        count: campaigns.length,
+        data: campaigns
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error fetching spiffs:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async createSpiff(req: Request, res: Response) {
+    try {
+      const created = await salesCommandService.createSpiffCampaign({
+        ...req.body,
+        created_by_ho_user_id: (req as any).user?.id || 'HO-COMMERCIAL-USER'
+      });
+      res.status(201).json({
+        success: true,
+        message: `Flash Spiff Booster "${created.campaign_title}" launched successfully`,
+        data: created
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error creating spiff:', error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  async updateSpiff(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const updated = await salesCommandService.updateSpiffCampaign(id, req.body);
+      res.json({
+        success: true,
+        message: `Flash Spiff Booster "${updated.campaign_title}" updated successfully`,
+        data: updated
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error updating spiff:', error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  async getSpiffLeaderboard(req: Request, res: Response) {
+    try {
+      const campaignId = req.query.campaign_id ? String(req.query.campaign_id) : undefined;
+      const leaderboard = await salesCommandService.getSpiffLeaderboard(campaignId);
+      res.json({
+        success: true,
+        count: leaderboard.length,
+        data: leaderboard
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error fetching spiff leaderboard:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getBranchSpiffLeaderboard(req: Request, res: Response) {
+    try {
+      const campaignId = req.query.campaign_id ? String(req.query.campaign_id) : undefined;
+      const leaderboard = await salesCommandService.getBranchSpiffLeaderboard(campaignId);
+      res.json({
+        success: true,
+        count: leaderboard.length,
+        data: leaderboard
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error fetching branch spiff leaderboard:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async syncSpiffsToPayroll(req: Request, res: Response) {
+    try {
+      const fiscalMonth = (req.body.fiscal_month as string) || '2026-10';
+      const result = await salesCommandService.syncSpiffsToPayroll(fiscalMonth);
+      res.json({
+        success: true,
+        message: result.total_records > 0 
+          ? `Successfully synchronized ₹${result.total_amount.toLocaleString()} in verified booster spiffs across ${result.employee_count} specialists to HR Payroll`
+          : 'All earned spiffs are already synced to HR Payroll',
+        data: result
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error syncing spiffs to payroll:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getBranches(req: Request, res: Response) {
+    try {
+      const branches = await salesCommandService.getBranches();
+      res.json({
+        success: true,
+        count: branches.length,
+        data: branches
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error fetching branches:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  // ==============================================================================
+  // PHASE 17.6: UNIFIED FLEET BROADCAST BUNDLES & DUAL MONITOR
+  // ==============================================================================
+
+  async getBroadcastBundles(req: Request, res: Response) {
+    try {
+      const bundles = await salesCommandService.getBroadcastBundles();
+      res.json({
+        success: true,
+        count: bundles.length,
+        data: bundles
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error fetching broadcast bundles:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async createBroadcastBundle(req: Request, res: Response) {
+    try {
+      const created = await salesCommandService.createBroadcastBundle({
+        ...req.body,
+        dispatched_by_ho_user_id: (req as any).user?.id || 'usr-ho-sales-director'
+      });
+      res.status(201).json({
+        success: true,
+        message: `Unified Broadcast Bundle "${created.bundle_name}" successfully dispatched to ${created.acknowledged_terminal_count} showroom terminals!`,
+        data: created
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error creating broadcast bundle:', error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  async getUnifiedFleetOverview(req: Request, res: Response) {
+    try {
+      const overview = await salesCommandService.getUnifiedFleetOverview();
+      res.json({
+        success: true,
+        data: overview
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error fetching unified fleet overview:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async pingTerminal(req: Request, res: Response) {
+    try {
+      const terminalId = req.params.terminalId || req.body.terminal_id;
+      const type = (req.body.type || 'GREETING') as 'GREETING' | 'KIOSK';
+      const result = await salesCommandService.pingTerminal(terminalId, type);
+      res.json({
+        success: true,
+        message: `Terminal ${terminalId} heartbeat refreshed`,
+        data: result
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error pinging terminal:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   }

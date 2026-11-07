@@ -169,14 +169,20 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
       ]
     );
 
-    // 6. Real-time Head Office Sales Command pacing update
+    // 6. Real-time Head Office Sales Command pacing update & Spiff Contest Accrual
     try {
       const unitsCount = Array.isArray(sold_skus) && sold_skus.length > 0 ? sold_skus.length : 1;
       await salesCommandService.recordRetailSaleConversion(
         effectiveBranchId,
         Number(invoice_amount),
         unitsCount,
-        connection
+        connection,
+        {
+          salesEmployeeId: sales_employee_id,
+          salesEmployeeName: sales_employee_name,
+          invoiceNumber: invoice_number,
+          brandName: brandName
+        }
       );
     } catch (pacingErr) {
       console.error('[POS Webhook] Failed to update HO sales pacing:', pacingErr);

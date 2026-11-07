@@ -59,8 +59,8 @@ export class PresenceService {
           COALESCE(b.name, 'Showroom Branch') as branch_name,
           e.designation,
           e.employment_type,
-          e.brand_partner_id,
-          bp.brand_name,
+          COALESCE(sa.brand_id, e.brand_partner_id) as brand_partner_id,
+          COALESCE(sa.brand_name, bp.brand_name) as brand_name,
           u.full_name,
           u.email as user_email,
           COALESCE(sfs.current_status, 'AVAILABLE') as current_status,
@@ -74,6 +74,7 @@ export class PresenceService {
         LEFT JOIN imago_iam_db.users u ON e.user_id = u.id
         LEFT JOIN imago_org_db.branches b ON e.branch_id = b.id
         LEFT JOIN imago_hr_db.hr_brand_partners bp ON e.brand_partner_id = bp.id
+        LEFT JOIN retail_brand_specialist_assignments sa ON e.user_id = sa.employee_id AND sa.is_active = 1
         LEFT JOIN retail_staff_floor_status sfs ON e.id = sfs.employee_id
         LEFT JOIN retail_walkin_sessions ws ON sfs.current_walkin_session_id = ws.id AND ws.status = 'ENGAGED'
         WHERE e.division = 'RETAIL' AND e.status = 'ACTIVE' ${branchWhere}

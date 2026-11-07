@@ -1,3 +1,4 @@
+import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth';
 import { pool } from '../config/db';
 
@@ -14,7 +15,10 @@ const GLOBAL_ROLES = new Set([
   'HR_HEAD',
   'FINANCE_CONTROLLER',
   'CUSTOMER_EXPERIENCE_LEAD',
-  'SECURITY_COMPLIANCE_OFFICER'
+  'SECURITY_COMPLIANCE_OFFICER',
+  'VP_SALES',
+  'COMMERCIAL_OPS_MANAGER',
+  'DEAL_DESK_OFFICER'
 ]);
 
 /**
@@ -103,3 +107,30 @@ export async function resolveBranchScope(
     branchCode
   };
 }
+
+/**
+ * Express middleware that enforces branch-scoping on req.query.branch_id or req.body.branch_id.
+ * Non-global users (STORE_MANAGER, BRANCH_MGR, SALES_CONSULTANT) have branch_id strictly locked
+ * to their assigned branch.
+ */
+export const requireBranchScope = (paramName: string = 'branch_id') => {
+  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = await resolveBranchScope(req, (req.query[paramName] as string) || (req.body && req.body[paramName]));
+
+      // Attach resolved scope to req
+      (req as any).branchScope = scope;
+
+      // If user is restricted to a branch, override requested branch parameter
+      if (!scope.isGlobal && scope.targetBranchId) {
+        if (req.query) req.query[paramName] = scope.targetBranchId;
+        if (req.body && req.body[paramName]) req.body[paramName] = scope.targetBranchId;
+      }
+
+      next();
+    } catch (err: any) {
+      console.error('[requireBranchScope] Scope resolution failed:', err);
+      next();
+    }
+  };
+};
