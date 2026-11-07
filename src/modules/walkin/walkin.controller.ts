@@ -331,15 +331,30 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
     }
 
     const hasWarrantyAttach = Boolean(req.body.has_warranty_attach);
-    const brandName = req.body.brand_name || null;
+    let brandName = req.body.brand_name || null;
     const productSku = req.body.product_sku || null;
+
+    // Resolve brand FK against retail_brand_master (by id, code, or name)
+    let brandId: string | null = null;
+    if (req.body.brand_id || brandName) {
+      const [brandRows]: any = await connection.query(
+        `SELECT id, name FROM retail_brand_master
+         WHERE id = ? OR UPPER(code) = UPPER(?) OR ? LIKE CONCAT('%', name, '%')
+         ORDER BY (id = ?) DESC LIMIT 1`,
+        [req.body.brand_id || '', brandName || '', brandName || '', req.body.brand_id || '']
+      );
+      if (brandRows.length) {
+        brandId = brandRows[0].id;
+        brandName = brandName || brandRows[0].name;
+      }
+    }
 
     // Record conversion
     await connection.query(
       `INSERT INTO retail_conversions (
         id, session_id, branch_id, invoice_number, invoice_amount, payment_method,
-        sales_employee_id, sales_employee_name, sold_skus, has_warranty_attach, brand_name, product_sku, converted_at
-      ) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        sales_employee_id, sales_employee_name, sold_skus, has_warranty_attach, brand_name, brand_id, product_sku, converted_at
+      ) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         id,
         targetBranch,
@@ -351,6 +366,7 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
         JSON.stringify(sold_skus || []),
         hasWarrantyAttach ? 1 : 0,
         brandName,
+        brandId,
         productSku
       ]
     );

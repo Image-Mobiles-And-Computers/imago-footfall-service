@@ -455,43 +455,49 @@ export class SalesCommandService {
    */
   async getOemRebatesDashboard(fiscalQuarter: string = '2026-Q4'): Promise<any> {
     const [contracts]: any = await pool.query(
-      `SELECT * FROM ho_brand_oem_contracts WHERE fiscal_quarter = ? AND is_active = 1 ORDER BY target_purchase_volume DESC`,
+      `SELECT c.*, b.code AS brand_code, b.name AS brand_master_name, b.tier AS brand_tier, b.logo_url AS brand_logo
+       FROM ho_brand_oem_contracts c
+       LEFT JOIN retail_brand_master b ON c.brand_id = b.id
+       WHERE c.fiscal_quarter = ? AND c.is_active = 1
+       ORDER BY c.target_purchase_volume DESC`,
       [fiscalQuarter]
     );
 
-    // Query live conversions aggregated by brand
+    // Query live conversions aggregated by brand master FK (falls back to brand_name for legacy rows)
     const [conversionStats]: any = await pool.query(`
       SELECT 
+        brand_id,
         brand_name,
         COUNT(*) as conversions_count,
         COALESCE(SUM(invoice_amount), 0) as total_conversions_amount,
         COALESCE(SUM(has_warranty_attach), 0) as warranty_attach_count
       FROM retail_conversions
-      WHERE brand_name IS NOT NULL
-      GROUP BY brand_name
+      WHERE brand_id IS NOT NULL OR brand_name IS NOT NULL
+      GROUP BY brand_id, brand_name
     `);
 
-    const statsByBrand: Record<string, any> = {};
+    const statsByBrandId: Record<string, any> = {};
     for (const stat of conversionStats) {
-      statsByBrand[stat.brand_name] = {
-        count: Number(stat.conversions_count) || 0,
-        amount: Number(stat.total_conversions_amount) || 0,
-        warrantyCount: Number(stat.warranty_attach_count) || 0
+      if (!stat.brand_id) continue;
+      const prev = statsByBrandId[stat.brand_id] || { count: 0, amount: 0, warrantyCount: 0 };
+      statsByBrandId[stat.brand_id] = {
+        count: prev.count + (Number(stat.conversions_count) || 0),
+        amount: prev.amount + (Number(stat.total_conversions_amount) || 0),
+        warrantyCount: prev.warrantyCount + (Number(stat.warranty_attach_count) || 0)
       };
     }
 
     // Baseline enterprise quarterly purchase volume baselines (reflecting Q4 network run-rate)
     const baselinePurchases: Record<string, number> = {
-      'Apple India Direct Tier-1': 268500000, // ₹26.85 Cr base
-      'Samsung Electronics India': 214000000, // ₹21.40 Cr base
-      'OnePlus India Exclusive': 112000000    // ₹11.20 Cr base
+      'oem-apple-2026q4': 268500000,   // ₹26.85 Cr base
+      'oem-samsung-2026q4': 214000000, // ₹21.40 Cr base
+      'oem-oneplus-2026q4': 112000000  // ₹11.20 Cr base
     };
 
     const enrichedContracts = contracts.map((c: any) => {
-      const brandKey = c.brand_name.includes('Apple') ? 'Apple India' : c.brand_name.includes('Samsung') ? 'Samsung Electronics' : 'OnePlus';
-      const liveStats = statsByBrand[brandKey] || { count: 0, amount: 0, warrantyCount: 0 };
+      const liveStats = (c.brand_id && statsByBrandId[c.brand_id]) || { count: 0, amount: 0, warrantyCount: 0 };
 
-      const basePurchases = baselinePurchases[c.brand_name] || 0;
+      const basePurchases = baselinePurchases[c.id] || 0;
       const actualPurchasesToDate = basePurchases + liveStats.amount;
       const targetVolume = Number(c.target_purchase_volume) || 1;
       const achievementPct = Number(((actualPurchasesToDate / targetVolume) * 100).toFixed(1));
@@ -510,10 +516,10 @@ export class SalesCommandService {
       const careAttachTarget = Number(c.care_attach_target_percent) || 22.0;
       const actualCareAttachPct = liveStats.count > 0 
         ? Number(((liveStats.warrantyCount / liveStats.count) * 100).toFixed(1))
-        : 23.4;
+        : 0;
       const isCareQualified = actualCareAttachPct >= careAttachTarget;
-      const mdfRate = Number(c.mdf_per_unit) || 500;
-      const mdfEarned = Math.round((liveStats.warrantyCount > 0 ? liveStats.warrantyCount : 15) * mdfRate);
+      const mdfRate = Number(c.mdf_per_unit) || 0;
+      const mdfEarned = Math.round(liveStats.warrantyCount * mdfRate);
 
       let status = 'ON_TRACK';
       if (achievementPct >= 100) status = 'ACHIEVED';
@@ -533,7 +539,10 @@ export class SalesCommandService {
         care_attach_target_percent: careAttachTarget,
         actual_care_attach_percent: actualCareAttachPct,
         care_attach_status: isCareQualified ? 'QUALIFIED' : 'UNDER_TARGET',
-        care_attach_units: liveStats.warrantyCount > 0 ? liveStats.warrantyCount : 15,
+        care_attach_units: liveStats.warrantyCount,
+        min_achievement_percent: minAchievementPct,
+        rebate_percentage: rebatePct,
+        mdf_per_unit: mdfRate,
         mdf_earned: mdfEarned,
         promoter_threshold: Number(c.promoter_min_units_threshold) || 25,
         promoter_subsidy_rate: Number(c.promoter_subsidy_amount_per_rep) || 28000
@@ -646,14 +655,28 @@ export class SalesCommandService {
    * Create or renew an OEM Brand contract
    */
   async createOemContract(data: any): Promise<any> {
-    const id = `oem-${data.brand_name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${data.fiscal_quarter.toLowerCase()}`;
+    if (!data.brand_id) {
+      throw new Error('brand_id is required (must reference retail_brand_master)');
+    }
+    const [brandRows]: any = await pool.query(
+      `SELECT id, code, name FROM retail_brand_master WHERE id = ? LIMIT 1`,
+      [data.brand_id]
+    );
+    if (!brandRows.length) {
+      throw new Error(`Brand ${data.brand_id} not found in retail_brand_master`);
+    }
+    const brand = brandRows[0];
+    const brandName = (data.brand_name && String(data.brand_name).trim()) || brand.name;
+    const id = `oem-${String(brand.code).toLowerCase()}-${String(data.fiscal_quarter).toLowerCase()}`;
     await pool.query(
       `INSERT INTO ho_brand_oem_contracts (
-        id, brand_name, fiscal_quarter, target_purchase_volume, rebate_percentage,
+        id, brand_id, brand_name, fiscal_quarter, target_purchase_volume, rebate_percentage,
         min_achievement_percent, care_attach_target_percent, mdf_per_unit,
         promoter_min_units_threshold, promoter_subsidy_amount_per_rep, is_active, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
       ON DUPLICATE KEY UPDATE
+        brand_id = VALUES(brand_id),
+        brand_name = VALUES(brand_name),
         target_purchase_volume = VALUES(target_purchase_volume),
         rebate_percentage = VALUES(rebate_percentage),
         min_achievement_percent = VALUES(min_achievement_percent),
@@ -664,7 +687,8 @@ export class SalesCommandService {
         is_active = 1`,
       [
         id,
-        data.brand_name,
+        brand.id,
+        brandName,
         data.fiscal_quarter,
         data.target_purchase_volume,
         data.rebate_percentage,
@@ -677,6 +701,63 @@ export class SalesCommandService {
     );
 
     return { id, success: true, message: 'OEM Contract saved successfully' };
+  }
+
+  /**
+   * Update an existing OEM Brand contract (partial update; only whitelisted fields)
+   */
+  async updateOemContract(id: string, data: any): Promise<any | null> {
+    const [existing]: any = await pool.query(
+      `SELECT id FROM ho_brand_oem_contracts WHERE id = ? LIMIT 1`,
+      [id]
+    );
+    if (!existing.length) return null;
+
+    const numericFields = [
+      'target_purchase_volume', 'rebate_percentage', 'min_achievement_percent',
+      'care_attach_target_percent', 'mdf_per_unit', 'promoter_min_units_threshold',
+      'promoter_subsidy_amount_per_rep'
+    ];
+    const sets: string[] = [];
+    const values: any[] = [];
+
+    if (data.brand_id !== undefined) {
+      const [brandRows]: any = await pool.query(
+        `SELECT id FROM retail_brand_master WHERE id = ? LIMIT 1`,
+        [data.brand_id]
+      );
+      if (!brandRows.length) throw new Error(`Brand ${data.brand_id} not found in retail_brand_master`);
+      sets.push('brand_id = ?');
+      values.push(data.brand_id);
+    }
+    if (data.brand_name !== undefined && String(data.brand_name).trim()) {
+      sets.push('brand_name = ?');
+      values.push(String(data.brand_name).trim());
+    }
+    if (data.fiscal_quarter !== undefined && String(data.fiscal_quarter).trim()) {
+      sets.push('fiscal_quarter = ?');
+      values.push(String(data.fiscal_quarter).trim());
+    }
+    for (const f of numericFields) {
+      if (data[f] !== undefined && data[f] !== null && data[f] !== '') {
+        const n = Number(data[f]);
+        if (Number.isNaN(n) || n < 0) throw new Error(`${f} must be a non-negative number`);
+        sets.push(`${f} = ?`);
+        values.push(n);
+      }
+    }
+    if (data.is_active !== undefined) {
+      sets.push('is_active = ?');
+      values.push(data.is_active ? 1 : 0);
+    }
+
+    if (sets.length > 0) {
+      values.push(id);
+      await pool.query(`UPDATE ho_brand_oem_contracts SET ${sets.join(', ')} WHERE id = ?`, values);
+    }
+
+    const [rows]: any = await pool.query(`SELECT * FROM ho_brand_oem_contracts WHERE id = ?`, [id]);
+    return { ...rows[0], success: true, message: 'OEM Contract updated successfully' };
   }
 
   /**

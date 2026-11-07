@@ -102,6 +102,23 @@ export class SalesCommandController {
     }
   }
 
+  async updateOemContract(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const result = await salesCommandService.updateOemContract(id, req.body);
+      if (!result) {
+        return res.status(404).json({ success: false, error: `OEM contract ${id} not found` });
+      }
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error: any) {
+      console.error('[SalesCommandController] Error updating OEM contract:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   // ── Remote Price Exception & Discount Approval Tickets (<60s SLA) ───
   async createTicket(req: Request, res: Response) {
     try {
