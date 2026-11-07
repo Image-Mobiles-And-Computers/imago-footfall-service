@@ -693,7 +693,8 @@ export class SalesCommandService {
     const baselinePurchases: Record<string, number> = {
       'oem-apple-2026q4': 268500000,   // ₹26.85 Cr base
       'oem-samsung-2026q4': 214000000, // ₹21.40 Cr base
-      'oem-oneplus-2026q4': 112000000  // ₹11.20 Cr base
+      'oem-oneplus-2026q4': 112000000, // ₹11.20 Cr base
+      'oem-xiaomi-2026q4': 148000000   // ₹14.80 Cr base
     };
 
     const enrichedContracts = contracts.map((c: any) => {
@@ -776,7 +777,10 @@ export class SalesCommandService {
   /**
    * Fetch in-store brand promoter productivity & subsidy protection monitor
    */
-  async getPromoterProductivity(): Promise<any> {
+  async getPromoterProductivity(branchId?: string): Promise<any> {
+    const branchFilter = branchId && branchId !== 'ALL' ? 'AND sa.branch_id = ?' : '';
+    const params = branchId && branchId !== 'ALL' ? [branchId] : [];
+
     const [rows]: any = await pool.query(`
       SELECT 
         sa.id as assignment_id,
@@ -784,7 +788,8 @@ export class SalesCommandService {
         sa.employee_code,
         sa.employee_name,
         sa.branch_id,
-        sa.branch_name,
+        COALESCE(b.name, sa.branch_name) as branch_name,
+        COALESCE(b.code, '') as branch_code,
         sa.brand_id,
         sa.brand_name,
         sa.specialist_type,
@@ -796,28 +801,41 @@ export class SalesCommandService {
         COALESCE(fs.current_status, 'AVAILABLE') as floor_status,
         COUNT(rc.id) as units_sold_mtd,
         COALESCE(SUM(rc.invoice_amount), 0) as revenue_mtd,
-        COALESCE(SUM(rc.has_warranty_attach), 0) as care_units_mtd
+        COALESCE(SUM(rc.has_warranty_attach), 0) as care_units_mtd,
+        c.id as oem_contract_id,
+        c.brand_name as oem_contract_name,
+        c.rebate_percentage,
+        c.rebate_structure_type,
+        c.promoter_min_units_threshold,
+        c.promoter_subsidy_amount_per_rep
       FROM retail_brand_specialist_assignments sa
       LEFT JOIN retail_conversions rc ON (
         rc.sales_employee_id = sa.employee_id 
         AND (rc.brand_id = sa.brand_id OR rc.brand_name LIKE CONCAT('%', sa.brand_name, '%'))
       )
+      LEFT JOIN imago_org_db.branches b ON b.id = sa.branch_id
       LEFT JOIN imago_hr_db.hr_employees he ON he.id = sa.employee_id
       LEFT JOIN imago_hr_db.hr_shifts s ON he.shift_id = s.id
       LEFT JOIN retail_staff_floor_status fs ON fs.employee_id = sa.employee_id
-      WHERE sa.is_active = 1
+      LEFT JOIN ho_brand_oem_contracts c ON (
+        c.brand_id = sa.brand_id 
+        AND c.fiscal_quarter = '2026-Q4' 
+        AND c.is_active = 1
+      )
+      WHERE sa.is_active = 1 ${branchFilter}
       GROUP BY 
         sa.id, sa.employee_id, sa.employee_code, sa.employee_name, 
-        sa.branch_id, sa.branch_name, sa.brand_id, sa.brand_name, 
+        sa.branch_id, sa.branch_name, b.name, b.code, sa.brand_id, sa.brand_name, 
         sa.specialist_type, sa.monthly_target_units, sa.monthly_subsidy_amount, 
-        sa.is_paging_enabled, s.name, s.start_time, s.end_time, fs.current_status
+        sa.is_paging_enabled, s.name, s.start_time, s.end_time, fs.current_status,
+        c.id, c.brand_name, c.rebate_percentage, c.rebate_structure_type, c.promoter_min_units_threshold, c.promoter_subsidy_amount_per_rep
       ORDER BY units_sold_mtd DESC, sa.employee_name ASC
-    `);
+    `, params);
 
     const promoters = rows.map((r: any) => {
       const units = Number(r.units_sold_mtd) || 0;
-      const target = Number(r.monthly_target_units) || 25;
-      const subsidyRate = Number(r.monthly_subsidy_amount) || 28000;
+      const target = Number(r.promoter_min_units_threshold) || Number(r.monthly_target_units) || 25;
+      const subsidyRate = Number(r.promoter_subsidy_amount_per_rep) || Number(r.monthly_subsidy_amount) || 28000;
       const shortfall = Math.max(0, target - units);
       let status: 'SAFE' | 'WARNING' | 'FORFEITURE_RISK' = 'SAFE';
       if (units < target - 5) {
@@ -839,8 +857,13 @@ export class SalesCommandService {
         promoter_name: r.employee_name,
         branch_id: r.branch_id,
         branch_name: r.branch_name,
+        branch_code: r.branch_code || (r.branch_name?.includes('Koramangala') ? 'BR-SH-KORA' : r.branch_name?.includes('Indiranagar') ? 'BR-SH-INDIRA' : r.branch_name?.includes('Jayanagar') ? 'BR-SH-JAYA' : 'BR-SH'),
         brand_id: r.brand_id,
         brand_name: r.brand_name,
+        oem_contract_id: r.oem_contract_id || null,
+        oem_contract_name: r.oem_contract_name || null,
+        rebate_percentage: r.rebate_percentage ? Number(r.rebate_percentage) : null,
+        rebate_structure_type: r.rebate_structure_type || 'PROMOTER_SUBSIDY',
         specialist_type: r.specialist_type,
         shift_name: r.shift_name,
         shift_timings: r.shift_timings,

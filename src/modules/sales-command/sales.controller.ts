@@ -78,7 +78,8 @@ export class SalesCommandController {
 
   async getPromoterProductivity(req: Request, res: Response) {
     try {
-      const data = await salesCommandService.getPromoterProductivity();
+      const branchId = (req.query.branch_id as string) || (req as any).branchScope?.targetBranchId;
+      const data = await salesCommandService.getPromoterProductivity(branchId);
       res.json({
         success: true,
         data
