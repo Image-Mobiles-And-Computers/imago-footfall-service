@@ -520,3 +520,94 @@ export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ success: false, message: 'Failed to fetch walk-ins', error: error.message });
   }
 };
+
+/**
+ * GET /api/footfall/customers/lookup
+ * Fast lookup for POS auto-population by 10-digit mobile number
+ */
+export const lookupCustomer = async (req: AuthRequest, res: Response) => {
+  try {
+    const rawPhone = (req.query.phone as string) || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
+    const branchId = (req.query.branch_id as string) || '';
+
+    if (!cleanPhone || cleanPhone.length < 10) {
+      return res.status(400).json({ success: false, message: 'Valid 10-digit phone number is required' });
+    }
+
+    // 1. Check for ACTIVE walk-in session with this phone
+    let activeQuery = `
+      SELECT s.*,
+             TIMESTAMPDIFF(MINUTE, s.entered_at, NOW()) as dwell_minutes,
+             t.ticket_number as ho_ticket_number,
+             t.approved_discount as ho_approved_discount,
+             t.authorization_code as ho_authorization_code,
+             t.status as ho_ticket_status,
+             t.product_name as ho_product_name,
+             t.product_sku as ho_product_sku
+      FROM retail_walkin_sessions s
+      LEFT JOIN (
+        SELECT t1.*
+        FROM ho_price_exception_requests t1
+        INNER JOIN (
+          SELECT walkin_session_id, MAX(created_at) as max_created
+          FROM ho_price_exception_requests
+          WHERE walkin_session_id IS NOT NULL
+          GROUP BY walkin_session_id
+        ) t2 ON t1.walkin_session_id = t2.walkin_session_id AND t1.created_at = t2.max_created
+      ) t ON s.id = t.walkin_session_id
+      WHERE (s.customer_phone = ? OR s.customer_phone LIKE ?)
+        AND s.status IN ('ENTERED', 'ENGAGED', 'PENDING_SALES_COMMAND', 'CHECKOUT_INITIATED')
+    `;
+    const activeParams: any[] = [cleanPhone, `%${cleanPhone}`];
+    if (branchId && branchId !== 'ALL') {
+      activeQuery += ' AND s.branch_id = ?';
+      activeParams.push(branchId);
+    }
+    activeQuery += ' ORDER BY s.entered_at DESC LIMIT 1';
+
+    const [activeRows]: any = await pool.query(activeQuery, activeParams);
+
+    // 2. Lookup customer history if no active walk-in or to enrich customer profile
+    const [historyRows]: any = await pool.query(`
+      SELECT customer_name, customer_phone, COUNT(*) as total_visits,
+             MAX(entered_at) as last_visit
+      FROM retail_walkin_sessions
+      WHERE (customer_phone = ? OR customer_phone LIKE ?)
+        AND customer_name IS NOT NULL
+        AND customer_name != 'Anonymous Guest'
+      GROUP BY customer_phone, customer_name
+      ORDER BY last_visit DESC LIMIT 1
+    `, [cleanPhone, `%${cleanPhone}`]);
+
+    const activeSession = activeRows[0] || null;
+    const history = historyRows[0] || null;
+
+    if (!activeSession && !history) {
+      return res.json({
+        success: true,
+        found: false,
+        message: 'No existing walk-in or customer profile found for this phone.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      found: true,
+      data: {
+        phone: cleanPhone,
+        customerName: activeSession?.customer_name || history?.customer_name || '',
+        activeSession: activeSession,
+        assignedEmployeeId: activeSession?.assigned_employee_id || null,
+        assignedEmployeeName: activeSession?.assigned_employee_name || null,
+        categoryInterest: activeSession?.primary_category_name || null,
+        hoApprovedDiscount: activeSession?.ho_approved_discount ? parseFloat(activeSession.ho_approved_discount) : 0,
+        hoAuthorizationCode: activeSession?.ho_authorization_code || null,
+        hoTicketNumber: activeSession?.ho_ticket_number || null,
+        totalPastVisits: history?.total_visits || (activeSession ? 1 : 0)
+      }
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: 'Customer lookup failed', error: error.message });
+  }
+};

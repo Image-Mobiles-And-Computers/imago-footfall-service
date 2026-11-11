@@ -5,13 +5,15 @@ import {
   getAllWalkIns,
   reassignWalkIn,
   logLostOpportunity,
-  manualLinkConversion
+  manualLinkConversion,
+  lookupCustomer
 } from './walkin.controller';
 import { authenticateJwt } from '../../middleware/auth';
 
 const router = Router();
 
 // Store floor associate routes
+router.get('/customers/lookup', authenticateJwt, lookupCustomer);
 router.post('/walk-ins', authenticateJwt, createWalkIn);
 router.get('/walk-ins', authenticateJwt, getAllWalkIns);
 router.get('/walk-ins/active', authenticateJwt, getActiveWalkIns);
