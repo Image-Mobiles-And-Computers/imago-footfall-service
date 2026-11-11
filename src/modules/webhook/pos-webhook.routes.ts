@@ -6,6 +6,7 @@ const router = Router();
 
 // Ingestion webhook endpoint (accepts POS webhook callbacks)
 router.post('/webhook/pos-transaction', handlePosWebhook);
+router.post('/events/pos-conversion', handlePosWebhook);
 
 // Simulator endpoint for store staff and developers to test live reconciliation
 router.post('/webhook/simulate-pos-sale', authenticateJwt, simulatePosSale);

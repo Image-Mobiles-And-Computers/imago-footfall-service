@@ -6,29 +6,27 @@ import { salesCommandService } from '../sales-command/sales.service';
 export const handlePosWebhook = async (req: Request, res: Response) => {
   const connection = await pool.getConnection();
   try {
-    const {
-      session_id,
-      branch_id,
-      invoice_number,
-      invoice_amount,
-      customer_phone,
-      customer_name,
-      payment_method,
-      sales_employee_id,
-      sales_employee_name,
-      sold_skus
-    } = req.body;
+    const session_id = req.body.session_id || req.body.sessionId;
+    const branch_id = req.body.branch_id || req.body.branchId || req.body.branch || 'c9832255-2791-401d-88b5-a3d2c870c533';
+    const invoice_number = req.body.invoice_number || req.body.invoiceNumber;
+    const invoice_amount = req.body.invoice_amount || req.body.invoiceAmount || req.body.netPayable || req.body.totalAmount;
+    const customer_phone = req.body.customer_phone || req.body.customerPhone;
+    const customer_name = req.body.customer_name || req.body.customerName;
+    const payment_method = req.body.payment_method || req.body.paymentMethod || 'SPLIT';
+    const sales_employee_id = req.body.sales_employee_id || req.body.salesEmployeeId;
+    const sales_employee_name = req.body.sales_employee_name || req.body.salesEmployeeName;
+    const sold_skus = req.body.sold_skus || req.body.soldSkus || req.body.items;
 
-    if (!branch_id || !invoice_number || !invoice_amount) {
+    if (!invoice_number || !invoice_amount) {
       return res.status(400).json({
         success: false,
-        message: 'branch_id, invoice_number, and invoice_amount are required'
+        message: 'invoice_number and invoice_amount are required'
       });
     }
 
     // Normalize legacy HQ corporate ID to Indiranagar Flagship showroom
     let effectiveBranchId = branch_id;
-    if (effectiveBranchId === '1aea7937-4abc-4bb3-bb48-283172b49b8c') {
+    if (effectiveBranchId === '1aea7937-4abc-4bb3-bb48-283172b49b8c' || effectiveBranchId === 'BR-SH-INDIRA') {
       effectiveBranchId = 'c9832255-2791-401d-88b5-a3d2c870c533';
     }
 
@@ -97,14 +95,16 @@ export const handlePosWebhook = async (req: Request, res: Response) => {
         ]
       );
     } else {
-      // Update matched walk-in session to CONVERTED
+      // Update matched walk-in session to CONVERTED and enrich customer phone/name
       await connection.query(
         `UPDATE retail_walkin_sessions
          SET status = 'CONVERTED',
+             customer_phone = COALESCE(?, customer_phone),
+             customer_name = CASE WHEN customer_name IS NULL OR customer_name = 'Anonymous Guest' THEN ? ELSE customer_name END,
              exited_at = NOW(),
              dwell_duration_seconds = GREATEST(60, TIMESTAMPDIFF(SECOND, entered_at, NOW()))
          WHERE id = ?`,
-        [targetSessionId]
+        [customer_phone || null, customer_name || 'Walk-In Customer', targetSessionId]
       );
     }
 
