@@ -47,15 +47,35 @@ export async function resolveBranchScope(
 ): Promise<ScopeResolution> {
   const global = isGlobalUser(req);
 
-  if (global) {
-    if (requestedBranchId && requestedBranchId !== 'ALL' && requestedBranchId !== 'undefined' && requestedBranchId !== 'null') {
-      return {
-        targetBranchId: String(requestedBranchId),
-        isGlobal: true
-      };
+  // If a specific branch is requested (by code or UUID), resolve its canonical details from org DB
+  let resolvedBranchId: string | null = null;
+  let resolvedBranchName: string | undefined;
+  let resolvedBranchCode: string | undefined;
+
+  if (requestedBranchId && requestedBranchId !== 'ALL' && requestedBranchId !== 'undefined' && requestedBranchId !== 'null') {
+    try {
+      const [bRows]: any = await pool.query(
+        'SELECT id, code, name FROM imago_org_db.branches WHERE id = ? OR code = ? LIMIT 1',
+        [requestedBranchId, requestedBranchId]
+      );
+      if (bRows && bRows.length > 0) {
+        resolvedBranchId = bRows[0].id;
+        resolvedBranchName = bRows[0].name;
+        resolvedBranchCode = bRows[0].code;
+      } else {
+        resolvedBranchId = String(requestedBranchId);
+      }
+    } catch (err) {
+      console.warn('[RBAC Scope] Branch lookup failed for requestedBranchId:', err);
+      resolvedBranchId = String(requestedBranchId);
     }
+  }
+
+  if (global) {
     return {
-      targetBranchId: null,
+      targetBranchId: resolvedBranchId,
+      branchName: resolvedBranchName,
+      branchCode: resolvedBranchCode,
       isGlobal: true
     };
   }

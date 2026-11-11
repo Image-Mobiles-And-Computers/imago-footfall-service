@@ -98,7 +98,7 @@ export const createWalkIn = async (req: AuthRequest, res: Response) => {
 export const getActiveWalkIns = async (req: AuthRequest, res: Response) => {
   try {
     const { branch_id } = req.query;
-    const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
+    const { targetBranchId, branchCode } = await resolveBranchScope(req, branch_id as string);
 
     let query = `
       SELECT s.*,
@@ -134,8 +134,8 @@ export const getActiveWalkIns = async (req: AuthRequest, res: Response) => {
     const params: any[] = [];
 
     if (targetBranchId) {
-      query += ' AND s.branch_id = ?';
-      params.push(targetBranchId);
+      query += ' AND (s.branch_id = ? OR s.branch_id = ?)';
+      params.push(targetBranchId, branchCode || targetBranchId);
     }
 
     query += ' ORDER BY s.entered_at DESC';
@@ -409,7 +409,7 @@ export const manualLinkConversion = async (req: AuthRequest, res: Response) => {
 export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
   try {
     const { branch_id, status, search, limit = '20', offset = '0', start_date, end_date } = req.query;
-    const { targetBranchId } = await resolveBranchScope(req, branch_id as string);
+    const { targetBranchId, branchCode } = await resolveBranchScope(req, branch_id as string);
 
     let query = `
       SELECT s.*,
@@ -433,8 +433,8 @@ export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
     const params: any[] = [];
 
     if (targetBranchId) {
-      query += ' AND s.branch_id = ?';
-      params.push(targetBranchId);
+      query += ' AND (s.branch_id = ? OR s.branch_id = ?)';
+      params.push(targetBranchId, branchCode || targetBranchId);
     }
 
     if (status && status !== 'ALL') {
@@ -479,8 +479,8 @@ export const getAllWalkIns = async (req: AuthRequest, res: Response) => {
     `;
     const countParams: any[] = [];
     if (targetBranchId && targetBranchId !== 'ALL') {
-      countQuery += ' AND s.branch_id = ?';
-      countParams.push(targetBranchId);
+      countQuery += ' AND (s.branch_id = ? OR s.branch_id = ?)';
+      countParams.push(targetBranchId, branchCode || targetBranchId);
     }
     if (status && status !== 'ALL') {
       countQuery += ' AND s.status = ?';
@@ -530,6 +530,7 @@ export const lookupCustomer = async (req: AuthRequest, res: Response) => {
     const rawPhone = (req.query.phone as string) || '';
     const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
     const branchId = (req.query.branch_id as string) || '';
+    const { targetBranchId, branchCode } = await resolveBranchScope(req, branchId);
 
     if (!cleanPhone || cleanPhone.length < 10) {
       return res.status(400).json({ success: false, message: 'Valid 10-digit phone number is required' });
@@ -560,9 +561,9 @@ export const lookupCustomer = async (req: AuthRequest, res: Response) => {
         AND s.status IN ('ENTERED', 'ENGAGED', 'PENDING_SALES_COMMAND', 'CHECKOUT_INITIATED')
     `;
     const activeParams: any[] = [cleanPhone, `%${cleanPhone}`];
-    if (branchId && branchId !== 'ALL') {
-      activeQuery += ' AND s.branch_id = ?';
-      activeParams.push(branchId);
+    if (targetBranchId && targetBranchId !== 'ALL') {
+      activeQuery += ' AND (s.branch_id = ? OR s.branch_id = ?)';
+      activeParams.push(targetBranchId, branchCode || targetBranchId);
     }
     activeQuery += ' ORDER BY s.entered_at DESC LIMIT 1';
 
