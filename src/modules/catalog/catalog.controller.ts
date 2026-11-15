@@ -361,8 +361,8 @@ export const getProducts = async (req: Request, res: Response) => {
       params.push(category_id);
     }
     if (search) {
-      conditions.push('(p.model_name LIKE ? OR p.brand_name LIKE ? OR p.default_variant LIKE ?)');
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      conditions.push('(p.model_name LIKE ? OR p.brand_name LIKE ? OR p.default_variant LIKE ? OR p.sku_code LIKE ?)');
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     if (conditions.length > 0) {
@@ -400,7 +400,19 @@ export const getProductById = async (req: Request, res: Response) => {
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
-    const { brand_id, category_id, model_name, default_variant, msrp } = req.body;
+    const {
+      brand_id,
+      category_id,
+      model_name,
+      sku_code,
+      default_variant,
+      tracking_type = 'SERIALIZED_IMEI',
+      hsn_code = '85171300',
+      gst_rate_pct = 18.00,
+      msrp,
+      cost_price
+    } = req.body;
+
     if (!brand_id || !category_id || !model_name) {
       return res.status(400).json({ success: false, message: 'brand_id, category_id, and model_name are required' });
     }
@@ -415,18 +427,83 @@ export const createProduct = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid category_id' });
     }
 
+    const brandName = brandRows[0].name;
+    const catName = catRows[0].name;
+
+    // Generate or clean SKU code
+    let finalSku = (sku_code || '').trim().toUpperCase();
+    if (!finalSku) {
+      const bCode = brandName.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const mCode = model_name.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
+      const vCode = (default_variant || '').toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 4);
+      finalSku = `SKU-${bCode}-${mCode}${vCode ? '-' + vCode : ''}`;
+    }
+
+    const targetCost = cost_price !== undefined ? parseFloat(cost_price) : Math.round(parseFloat(msrp || 0) * 0.82);
+    const targetMsrp = parseFloat(msrp || 0);
+    const targetGst = parseFloat(gst_rate_pct || 18.00);
+
     const id = uuidv4();
     await pool.query(
-      `INSERT INTO retail_product_master (id, brand_id, brand_name, category_id, category_name, model_name, default_variant, msrp, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
-      [id, brand_id, brandRows[0].name, category_id, catRows[0].name, model_name.trim(), default_variant || null, msrp || 0.00]
+      `INSERT INTO retail_product_master (id, brand_id, brand_name, category_id, category_name, model_name, sku_code, default_variant, tracking_type, hsn_code, gst_rate_pct, msrp, cost_price, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+      [
+        id,
+        brand_id,
+        brandName,
+        category_id,
+        catName,
+        model_name.trim(),
+        finalSku,
+        default_variant || null,
+        tracking_type,
+        hsn_code,
+        targetGst,
+        targetMsrp,
+        targetCost
+      ]
     );
 
+    // Sync to Universal Inventory (:4013) & WMS (:4012)
+    try {
+      await pool.query(
+        `INSERT INTO imago_inventory_db.inv_catalog_skus
+         (sku_id, sku_code, product_id, brand_id, category_id, brand_name, category_code, model_name, tracking_type, hsn_code, gst_rate_pct, mrp, cost_price_target)
+         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           product_id = VALUES(product_id),
+           brand_name = VALUES(brand_name),
+           category_code = VALUES(category_code),
+           model_name = VALUES(model_name),
+           tracking_type = VALUES(tracking_type),
+           hsn_code = VALUES(hsn_code),
+           gst_rate_pct = VALUES(gst_rate_pct),
+           mrp = VALUES(mrp),
+           cost_price_target = VALUES(cost_price_target)`,
+        [
+          finalSku,
+          id,
+          brand_id,
+          category_id,
+          brandName,
+          catName.toUpperCase().replace(/\s+/g, '_'),
+          model_name + (default_variant ? ' ' + default_variant : ''),
+          tracking_type,
+          hsn_code,
+          targetGst,
+          targetMsrp,
+          targetCost
+        ]
+      );
+    } catch (syncErr) {
+      console.warn('[Catalog Sync] Could not sync SKU to inv_catalog_skus:', syncErr);
+    }
+
     const [created]: any = await pool.query('SELECT * FROM retail_product_master WHERE id = ?', [id]);
-    res.status(201).json({ success: true, message: 'Product created successfully', data: created[0] });
+    res.status(201).json({ success: true, message: 'Product created and synced to inventory catalog successfully', data: created[0] });
   } catch (error: any) {
     if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ success: false, message: 'This brand already has a model with this name' });
+      return res.status(409).json({ success: false, message: 'A product with this SKU or Model Name already exists' });
     }
     res.status(500).json({ success: false, message: 'Failed to create product', error: error.message });
   }
@@ -435,7 +512,19 @@ export const createProduct = async (req: Request, res: Response) => {
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { brand_id, category_id, model_name, default_variant, msrp, is_active } = req.body;
+    const {
+      brand_id,
+      category_id,
+      model_name,
+      sku_code,
+      default_variant,
+      tracking_type,
+      hsn_code,
+      gst_rate_pct,
+      msrp,
+      cost_price,
+      is_active
+    } = req.body;
 
     const [existing]: any = await pool.query('SELECT * FROM retail_product_master WHERE id = ?', [id]);
     if (!existing[0]) {
@@ -454,6 +543,15 @@ export const updateProduct = async (req: Request, res: Response) => {
       if (catRows[0]) categoryName = catRows[0].name;
     }
 
+    const finalSku = (sku_code !== undefined ? sku_code.trim().toUpperCase() : existing[0].sku_code);
+    const finalTracking = tracking_type || existing[0].tracking_type || 'SERIALIZED_IMEI';
+    const finalHsn = hsn_code || existing[0].hsn_code || '85171300';
+    const finalGst = gst_rate_pct !== undefined ? parseFloat(gst_rate_pct) : existing[0].gst_rate_pct;
+    const finalMsrp = msrp !== undefined ? parseFloat(msrp) : existing[0].msrp;
+    const finalCost = cost_price !== undefined ? parseFloat(cost_price) : existing[0].cost_price;
+    const finalModel = model_name !== undefined ? model_name : existing[0].model_name;
+    const finalVariant = default_variant !== undefined ? default_variant : existing[0].default_variant;
+
     await pool.query(
       `UPDATE retail_product_master
        SET brand_id = COALESCE(?, brand_id),
@@ -461,15 +559,69 @@ export const updateProduct = async (req: Request, res: Response) => {
            category_id = COALESCE(?, category_id),
            category_name = ?,
            model_name = COALESCE(?, model_name),
+           sku_code = COALESCE(?, sku_code),
            default_variant = COALESCE(?, default_variant),
+           tracking_type = COALESCE(?, tracking_type),
+           hsn_code = COALESCE(?, hsn_code),
+           gst_rate_pct = COALESCE(?, gst_rate_pct),
            msrp = COALESCE(?, msrp),
+           cost_price = COALESCE(?, cost_price),
            is_active = COALESCE(?, is_active)
        WHERE id = ?`,
-      [brand_id, brandName, category_id, categoryName, model_name, default_variant, msrp, is_active, id]
+      [
+        brand_id,
+        brandName,
+        category_id,
+        categoryName,
+        finalModel,
+        finalSku,
+        finalVariant,
+        finalTracking,
+        finalHsn,
+        finalGst,
+        finalMsrp,
+        finalCost,
+        is_active,
+        id
+      ]
     );
 
+    // Sync updates to imago_inventory_db.inv_catalog_skus
+    try {
+      await pool.query(
+        `INSERT INTO imago_inventory_db.inv_catalog_skus
+         (sku_id, sku_code, product_id, brand_id, category_id, brand_name, category_code, model_name, tracking_type, hsn_code, gst_rate_pct, mrp, cost_price_target)
+         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           brand_name = VALUES(brand_name),
+           category_code = VALUES(category_code),
+           model_name = VALUES(model_name),
+           tracking_type = VALUES(tracking_type),
+           hsn_code = VALUES(hsn_code),
+           gst_rate_pct = VALUES(gst_rate_pct),
+           mrp = VALUES(mrp),
+           cost_price_target = VALUES(cost_price_target)`,
+        [
+          finalSku,
+          id,
+          brand_id || existing[0].brand_id,
+          category_id || existing[0].category_id,
+          brandName,
+          categoryName.toUpperCase().replace(/\s+/g, '_'),
+          finalModel + (finalVariant ? ' ' + finalVariant : ''),
+          finalTracking,
+          finalHsn,
+          finalGst,
+          finalMsrp,
+          finalCost
+        ]
+      );
+    } catch (syncErr) {
+      console.warn('[Catalog Sync] Could not sync updated SKU to inv_catalog_skus:', syncErr);
+    }
+
     const [updated]: any = await pool.query('SELECT * FROM retail_product_master WHERE id = ?', [id]);
-    res.json({ success: true, message: 'Product updated successfully', data: updated[0] });
+    res.json({ success: true, message: 'Product updated and synced to inventory catalog successfully', data: updated[0] });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to update product', error: error.message });
   }
