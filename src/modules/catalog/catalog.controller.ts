@@ -410,7 +410,8 @@ export const createProduct = async (req: Request, res: Response) => {
       hsn_code = '85171300',
       gst_rate_pct = 18.00,
       msrp,
-      cost_price
+      cost_price,
+      is_active
     } = req.body;
 
     if (!brand_id || !category_id || !model_name) {
@@ -442,11 +443,12 @@ export const createProduct = async (req: Request, res: Response) => {
     const targetCost = cost_price !== undefined ? parseFloat(cost_price) : Math.round(parseFloat(msrp || 0) * 0.82);
     const targetMsrp = parseFloat(msrp || 0);
     const targetGst = parseFloat(gst_rate_pct || 18.00);
+    const targetActive = is_active !== undefined ? (is_active === true || is_active === 1 || is_active === 'true') : true;
 
     const id = uuidv4();
     await pool.query(
       `INSERT INTO retail_product_master (id, brand_id, brand_name, category_id, category_name, model_name, sku_code, default_variant, tracking_type, hsn_code, gst_rate_pct, msrp, cost_price, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         brand_id,
@@ -460,7 +462,8 @@ export const createProduct = async (req: Request, res: Response) => {
         hsn_code,
         targetGst,
         targetMsrp,
-        targetCost
+        targetCost,
+        targetActive
       ]
     );
 
