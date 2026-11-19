@@ -99,9 +99,9 @@ export async function seedProducts(connection: any): Promise<number> {
   const [brands]: any = await connection.query('SELECT id, code, name FROM retail_brand_master');
   const [categories]: any = await connection.query('SELECT id, code, name FROM retail_category_master');
 
-  const brandMap = new Map<string, { id: string; name: string }>();
+  const brandMap = new Map<string, { id: string; code: string; name: string }>();
   for (const b of brands) {
-    brandMap.set(b.code, { id: b.id, name: b.name });
+    brandMap.set(b.code, { id: b.id, code: b.code, name: b.name });
   }
 
   const categoryMap = new Map<string, { id: string; name: string }>();
@@ -123,18 +123,67 @@ export async function seedProducts(connection: any): Promise<number> {
       continue;
     }
 
-    await connection.query(
-      `INSERT INTO retail_product_master (id, brand_id, brand_name, category_id, category_name, model_name, default_variant, msrp, is_active)
-       VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, TRUE)
-       ON DUPLICATE KEY UPDATE
-         brand_name = VALUES(brand_name),
-         category_id = VALUES(category_id),
-         category_name = VALUES(category_name),
-         default_variant = VALUES(default_variant),
-         msrp = VALUES(msrp),
-         is_active = TRUE`,
-      [brand.id, brand.name, category.id, category.name, p.model_name, p.default_variant || null, p.msrp || 0.00]
+    const skuCode = p.sku_code || `SKU-${brand.code.substring(0, 4)}-${p.model_name.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10)}${p.default_variant ? '-' + p.default_variant.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 4) : ''}`;
+    const trackingType = p.tracking_type || 'SERIALIZED_IMEI';
+    const hsnCode = p.hsn_code || '85171300';
+    const gstRatePct = p.gst_rate_pct || 18.00;
+    const costPrice = p.cost_price || Math.round((p.msrp || 0) * 0.82);
+
+    const [existing]: any = await connection.query(
+      'SELECT id FROM retail_product_master WHERE sku_code = ? OR (brand_id = ? AND model_name = ?) LIMIT 1',
+      [skuCode, brand.id, p.model_name]
     );
+
+    if (existing.length > 0) {
+      await connection.query(
+        `UPDATE retail_product_master SET
+           brand_id = ?, brand_name = ?, category_id = ?, category_name = ?,
+           model_name = ?, sku_code = ?, default_variant = ?, tracking_type = ?,
+           hsn_code = ?, gst_rate_pct = ?, msrp = ?, cost_price = ?, is_active = TRUE
+         WHERE id = ?`,
+        [brand.id, brand.name, category.id, category.name, p.model_name, skuCode, p.default_variant || null, trackingType, hsnCode, gstRatePct, p.msrp || 0.00, costPrice, existing[0].id]
+      );
+    } else {
+      await connection.query(
+        `INSERT INTO retail_product_master (id, brand_id, brand_name, category_id, category_name, model_name, sku_code, default_variant, tracking_type, hsn_code, gst_rate_pct, msrp, cost_price, is_active)
+         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+        [brand.id, brand.name, category.id, category.name, p.model_name, skuCode, p.default_variant || null, trackingType, hsnCode, gstRatePct, p.msrp || 0.00, costPrice]
+      );
+    }
+
+    // Also sync to imago_inventory_db.inv_catalog_skus for complete cross-module data integrity
+    try {
+      await connection.query(
+        `INSERT INTO imago_inventory_db.inv_catalog_skus
+         (sku_id, sku_code, brand_id, category_id, brand_name, category_code, model_name, tracking_type, hsn_code, gst_rate_pct, mrp, cost_price_target)
+         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           brand_name = VALUES(brand_name),
+           category_code = VALUES(category_code),
+           model_name = VALUES(model_name),
+           tracking_type = VALUES(tracking_type),
+           hsn_code = VALUES(hsn_code),
+           gst_rate_pct = VALUES(gst_rate_pct),
+           mrp = VALUES(mrp),
+           cost_price_target = VALUES(cost_price_target)`,
+        [
+          skuCode,
+          brand.id,
+          category.id,
+          brand.name,
+          category.code.toUpperCase().replace(/\s+/g, '_'),
+          p.model_name + (p.default_variant ? ' ' + p.default_variant : ''),
+          trackingType,
+          hsnCode,
+          gstRatePct,
+          p.msrp || 0.00,
+          costPrice
+        ]
+      );
+    } catch (syncErr) {
+      // Non-fatal if cross-db isn't direct
+    }
+
     count++;
   }
 

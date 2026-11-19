@@ -16,6 +16,14 @@
     "display_order": 2
   },
   {
+    "code": "GOOGLE",
+    "name": "Google",
+    "tier": "FLAGSHIP",
+    "category_focus": "Smartphones, Tablets, Smart Home, Audio",
+    "logo_url": "/brands/google.svg",
+    "display_order": 3
+  },
+  {
     "code": "ONEPLUS",
     "name": "OnePlus",
     "tier": "PREMIUM",

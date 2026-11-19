@@ -423,12 +423,13 @@ export const createProduct = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid brand_id' });
     }
 
-    const [catRows]: any = await pool.query('SELECT name FROM retail_category_master WHERE id = ?', [category_id]);
+    const [catRows]: any = await pool.query('SELECT code, name FROM retail_category_master WHERE id = ?', [category_id]);
     if (!catRows[0]) {
       return res.status(400).json({ success: false, message: 'Invalid category_id' });
     }
 
     const brandName = brandRows[0].name;
+    const catCode = catRows[0].code;
     const catName = catRows[0].name;
 
     // Generate or clean SKU code
@@ -489,7 +490,7 @@ export const createProduct = async (req: Request, res: Response) => {
           brand_id,
           category_id,
           brandName,
-          catName.toUpperCase().replace(/\s+/g, '_'),
+          catCode,
           model_name + (default_variant ? ' ' + default_variant : ''),
           tracking_type,
           hsn_code,
@@ -541,9 +542,12 @@ export const updateProduct = async (req: Request, res: Response) => {
     }
 
     let categoryName = existing[0].category_name;
-    if (category_id && category_id !== existing[0].category_id) {
-      const [catRows]: any = await pool.query('SELECT name FROM retail_category_master WHERE id = ?', [category_id]);
-      if (catRows[0]) categoryName = catRows[0].name;
+    let categoryCode = 'SMARTPHONES';
+    const targetCatId = category_id || existing[0].category_id;
+    const [catRows]: any = await pool.query('SELECT code, name FROM retail_category_master WHERE id = ?', [targetCatId]);
+    if (catRows[0]) {
+      categoryCode = catRows[0].code;
+      categoryName = catRows[0].name;
     }
 
     const finalSku = (sku_code !== undefined ? sku_code.trim().toUpperCase() : existing[0].sku_code);
@@ -610,7 +614,7 @@ export const updateProduct = async (req: Request, res: Response) => {
           brand_id || existing[0].brand_id,
           category_id || existing[0].category_id,
           brandName,
-          categoryName.toUpperCase().replace(/\s+/g, '_'),
+          categoryCode,
           finalModel + (finalVariant ? ' ' + finalVariant : ''),
           finalTracking,
           finalHsn,
@@ -640,6 +644,11 @@ export const deleteProduct = async (req: Request, res: Response) => {
       return res.json({ success: true, message: 'Product deactivated because it has associated lost-opportunity records' });
     }
     await pool.query('DELETE FROM retail_product_master WHERE id = ?', [id]);
+    try {
+      await pool.query('DELETE FROM imago_inventory_db.inv_catalog_skus WHERE product_id = ?', [id]);
+    } catch (syncErr) {
+      // Non-fatal
+    }
     res.json({ success: true, message: 'Product deleted permanently' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to delete product', error: error.message });
