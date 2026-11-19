@@ -569,7 +569,18 @@ export const lookupCustomer = async (req: AuthRequest, res: Response) => {
 
     const [activeRows]: any = await pool.query(activeQuery, activeParams);
 
-    // 2. Lookup customer history if no active walk-in or to enrich customer profile
+    // 2. Lookup customer history or Customer Master
+    let masterProfile: any = null;
+    try {
+      const [masterRows]: any = await pool.query(
+        `SELECT * FROM imago_npl_db.npl_branch_vip_clients WHERE customer_phone = ? OR customer_phone LIKE ? LIMIT 1`,
+        [cleanPhone, `%${cleanPhone}`]
+      );
+      masterProfile = masterRows[0] || null;
+    } catch {
+      // ignore if imago_npl_db not available yet
+    }
+
     const [historyRows]: any = await pool.query(`
       SELECT customer_name, customer_phone, COUNT(*) as total_visits,
              MAX(entered_at) as last_visit
@@ -584,7 +595,7 @@ export const lookupCustomer = async (req: AuthRequest, res: Response) => {
     const activeSession = activeRows[0] || null;
     const history = historyRows[0] || null;
 
-    if (!activeSession && !history) {
+    if (!activeSession && !history && !masterProfile) {
       return res.json({
         success: true,
         found: false,
@@ -597,15 +608,19 @@ export const lookupCustomer = async (req: AuthRequest, res: Response) => {
       found: true,
       data: {
         phone: cleanPhone,
-        customerName: activeSession?.customer_name || history?.customer_name || '',
+        customerName: activeSession?.customer_name || masterProfile?.customer_name || history?.customer_name || '',
+        vipTier: masterProfile?.vip_tier || (history?.total_visits >= 3 ? 'VIP' : null),
+        historicalSpend: masterProfile ? Number(masterProfile.historical_spend) : 0,
+        preferredModel: masterProfile?.preferred_model || null,
+        conciergeNotes: masterProfile?.notes || null,
         activeSession: activeSession,
         assignedEmployeeId: activeSession?.assigned_employee_id || null,
         assignedEmployeeName: activeSession?.assigned_employee_name || null,
-        categoryInterest: activeSession?.primary_category_name || null,
+        categoryInterest: activeSession?.primary_category_name || masterProfile?.preferred_model || null,
         hoApprovedDiscount: activeSession?.ho_approved_discount ? parseFloat(activeSession.ho_approved_discount) : 0,
         hoAuthorizationCode: activeSession?.ho_authorization_code || null,
         hoTicketNumber: activeSession?.ho_ticket_number || null,
-        totalPastVisits: history?.total_visits || (activeSession ? 1 : 0)
+        totalPastVisits: history?.total_visits || (activeSession ? 1 : (masterProfile ? 1 : 0))
       }
     });
   } catch (error: any) {

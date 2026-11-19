@@ -218,6 +218,18 @@ export const lookupCustomerByPhone = async (req: AuthRequest, res: Response) => 
 
     const cleanPhone = phone.trim();
 
+    // Check Customer Master first
+    let masterClient: any = null;
+    try {
+      const [mRows]: any = await pool.query(
+        `SELECT * FROM imago_npl_db.npl_branch_vip_clients WHERE customer_phone = ? OR customer_phone LIKE ? LIMIT 1`,
+        [cleanPhone, `%${cleanPhone}`]
+      );
+      masterClient = mRows[0] || null;
+    } catch {
+      // ignore cross-db error if database not reachable
+    }
+
     const [visits]: any = await pool.query(`
       SELECT 
         ws.customer_name,
@@ -233,6 +245,21 @@ export const lookupCustomerByPhone = async (req: AuthRequest, res: Response) => 
     `, [cleanPhone]);
 
     if (visits.length === 0) {
+      if (masterClient) {
+        return res.json({
+          success: true,
+          data: {
+            exists: true,
+            customer_name: masterClient.customer_name,
+            customer_type: masterClient.vip_tier || 'SHOWROOM VIP',
+            is_vip: true,
+            visits_count: 1,
+            total_spend: Number(masterClient.historical_spend) || 0,
+            last_visit_at: masterClient.last_walkin_at || null,
+            recent_category: masterClient.preferred_model || null
+          }
+        });
+      }
       return res.json({
         success: true,
         data: {
@@ -245,21 +272,21 @@ export const lookupCustomerByPhone = async (req: AuthRequest, res: Response) => 
       });
     }
 
-    const totalSpent = visits.reduce((acc: number, v: any) => acc + (Number(v.invoice_amount) || 0), 0);
-    const isVip = visits.length >= 3 || totalSpent >= 75000;
-    const latestName = visits.find((v: any) => v.customer_name)?.customer_name || null;
+    const totalSpent = visits.reduce((acc: number, v: any) => acc + (Number(v.invoice_amount) || 0), 0) + (masterClient ? Number(masterClient.historical_spend) : 0);
+    const isVip = Boolean(masterClient) || visits.length >= 3 || totalSpent >= 75000;
+    const latestName = visits.find((v: any) => v.customer_name)?.customer_name || masterClient?.customer_name || null;
 
     res.json({
       success: true,
       data: {
         exists: true,
         customer_name: latestName,
-        customer_type: isVip ? 'VIP' : (visits.length > 1 ? 'RETURNING' : 'NEW'),
+        customer_type: masterClient?.vip_tier || (isVip ? 'VIP' : (visits.length > 1 ? 'RETURNING' : 'NEW')),
         is_vip: isVip,
         visits_count: visits.length,
         total_spend: totalSpent,
-        last_visit_at: visits[0]?.entered_at || null,
-        recent_category: visits[0]?.primary_category_name || null
+        last_visit_at: visits[0]?.entered_at || masterClient?.last_walkin_at || null,
+        recent_category: visits[0]?.primary_category_name || masterClient?.preferred_model || null
       }
     });
   } catch (error: any) {
