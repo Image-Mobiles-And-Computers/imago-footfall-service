@@ -419,7 +419,8 @@ export const createProduct = async (req: Request, res: Response) => {
       grade_b_resale_price,
       grade_c_resale_price,
       grade_d_resale_price,
-      is_active
+      is_active,
+      is_buyback_allowed
     } = req.body;
 
     if (!brand_id || !category_id || !model_name) {
@@ -463,10 +464,12 @@ export const createProduct = async (req: Request, res: Response) => {
     const gcResale = grade_c_resale_price !== undefined ? parseFloat(grade_c_resale_price) : 0;
     const gdResale = grade_d_resale_price !== undefined ? parseFloat(grade_d_resale_price) : 0;
 
+    const targetBuyback = is_buyback_allowed !== undefined ? (is_buyback_allowed === true || is_buyback_allowed === 1 || is_buyback_allowed === 'true') : true;
+
     const id = uuidv4();
     await pool.query(
-      `INSERT INTO retail_product_master (id, brand_id, brand_name, category_id, category_name, model_name, sku_code, default_variant, tracking_type, hsn_code, gst_rate_pct, msrp, cost_price, grade_a_price, grade_b_price, grade_c_price, grade_d_price, grade_a_resale_price, grade_b_resale_price, grade_c_resale_price, grade_d_resale_price, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO retail_product_master (id, brand_id, brand_name, category_id, category_name, model_name, sku_code, default_variant, tracking_type, hsn_code, gst_rate_pct, msrp, cost_price, grade_a_price, grade_b_price, grade_c_price, grade_d_price, grade_a_resale_price, grade_b_resale_price, grade_c_resale_price, grade_d_resale_price, is_active, is_buyback_allowed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         brand_id,
@@ -489,7 +492,8 @@ export const createProduct = async (req: Request, res: Response) => {
         gbResale,
         gcResale,
         gdResale,
-        targetActive
+        targetActive,
+        targetBuyback
       ]
     );
 
@@ -560,7 +564,8 @@ export const updateProduct = async (req: Request, res: Response) => {
       grade_b_resale_price,
       grade_c_resale_price,
       grade_d_resale_price,
-      is_active
+      is_active,
+      is_buyback_allowed
     } = req.body;
 
     const [existing]: any = await pool.query('SELECT * FROM retail_product_master WHERE id = ?', [id]);
@@ -623,7 +628,8 @@ export const updateProduct = async (req: Request, res: Response) => {
            grade_b_resale_price = COALESCE(?, grade_b_resale_price),
            grade_c_resale_price = COALESCE(?, grade_c_resale_price),
            grade_d_resale_price = COALESCE(?, grade_d_resale_price),
-           is_active = COALESCE(?, is_active)
+           is_active = COALESCE(?, is_active),
+           is_buyback_allowed = COALESCE(?, is_buyback_allowed)
        WHERE id = ?`,
       [
         brand_id,
@@ -647,6 +653,7 @@ export const updateProduct = async (req: Request, res: Response) => {
         finalGcResale,
         finalGdResale,
         is_active,
+        is_buyback_allowed,
         id
       ]
     );
