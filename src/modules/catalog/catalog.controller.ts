@@ -411,6 +411,14 @@ export const createProduct = async (req: Request, res: Response) => {
       gst_rate_pct = 18.00,
       msrp,
       cost_price,
+      grade_a_price,
+      grade_b_price,
+      grade_c_price,
+      grade_d_price,
+      grade_a_resale_price,
+      grade_b_resale_price,
+      grade_c_resale_price,
+      grade_d_resale_price,
       is_active
     } = req.body;
 
@@ -446,10 +454,19 @@ export const createProduct = async (req: Request, res: Response) => {
     const targetGst = parseFloat(gst_rate_pct || 18.00);
     const targetActive = is_active !== undefined ? (is_active === true || is_active === 1 || is_active === 'true') : true;
 
+    const gaBuy = grade_a_price !== undefined ? parseFloat(grade_a_price) : 0;
+    const gbBuy = grade_b_price !== undefined ? parseFloat(grade_b_price) : 0;
+    const gcBuy = grade_c_price !== undefined ? parseFloat(grade_c_price) : 0;
+    const gdBuy = grade_d_price !== undefined ? parseFloat(grade_d_price) : 0;
+    const gaResale = grade_a_resale_price !== undefined ? parseFloat(grade_a_resale_price) : 0;
+    const gbResale = grade_b_resale_price !== undefined ? parseFloat(grade_b_resale_price) : 0;
+    const gcResale = grade_c_resale_price !== undefined ? parseFloat(grade_c_resale_price) : 0;
+    const gdResale = grade_d_resale_price !== undefined ? parseFloat(grade_d_resale_price) : 0;
+
     const id = uuidv4();
     await pool.query(
-      `INSERT INTO retail_product_master (id, brand_id, brand_name, category_id, category_name, model_name, sku_code, default_variant, tracking_type, hsn_code, gst_rate_pct, msrp, cost_price, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO retail_product_master (id, brand_id, brand_name, category_id, category_name, model_name, sku_code, default_variant, tracking_type, hsn_code, gst_rate_pct, msrp, cost_price, grade_a_price, grade_b_price, grade_c_price, grade_d_price, grade_a_resale_price, grade_b_resale_price, grade_c_resale_price, grade_d_resale_price, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         brand_id,
@@ -464,6 +481,14 @@ export const createProduct = async (req: Request, res: Response) => {
         targetGst,
         targetMsrp,
         targetCost,
+        gaBuy,
+        gbBuy,
+        gcBuy,
+        gdBuy,
+        gaResale,
+        gbResale,
+        gcResale,
+        gdResale,
         targetActive
       ]
     );
@@ -527,6 +552,14 @@ export const updateProduct = async (req: Request, res: Response) => {
       gst_rate_pct,
       msrp,
       cost_price,
+      grade_a_price,
+      grade_b_price,
+      grade_c_price,
+      grade_d_price,
+      grade_a_resale_price,
+      grade_b_resale_price,
+      grade_c_resale_price,
+      grade_d_resale_price,
       is_active
     } = req.body;
 
@@ -559,6 +592,15 @@ export const updateProduct = async (req: Request, res: Response) => {
     const finalModel = model_name !== undefined ? model_name : existing[0].model_name;
     const finalVariant = default_variant !== undefined ? default_variant : existing[0].default_variant;
 
+    const finalGaBuy = grade_a_price !== undefined ? parseFloat(grade_a_price) : existing[0].grade_a_price;
+    const finalGbBuy = grade_b_price !== undefined ? parseFloat(grade_b_price) : existing[0].grade_b_price;
+    const finalGcBuy = grade_c_price !== undefined ? parseFloat(grade_c_price) : existing[0].grade_c_price;
+    const finalGdBuy = grade_d_price !== undefined ? parseFloat(grade_d_price) : existing[0].grade_d_price;
+    const finalGaResale = grade_a_resale_price !== undefined ? parseFloat(grade_a_resale_price) : existing[0].grade_a_resale_price;
+    const finalGbResale = grade_b_resale_price !== undefined ? parseFloat(grade_b_resale_price) : existing[0].grade_b_resale_price;
+    const finalGcResale = grade_c_resale_price !== undefined ? parseFloat(grade_c_resale_price) : existing[0].grade_c_resale_price;
+    const finalGdResale = grade_d_resale_price !== undefined ? parseFloat(grade_d_resale_price) : existing[0].grade_d_resale_price;
+
     await pool.query(
       `UPDATE retail_product_master
        SET brand_id = COALESCE(?, brand_id),
@@ -573,6 +615,14 @@ export const updateProduct = async (req: Request, res: Response) => {
            gst_rate_pct = COALESCE(?, gst_rate_pct),
            msrp = COALESCE(?, msrp),
            cost_price = COALESCE(?, cost_price),
+           grade_a_price = COALESCE(?, grade_a_price),
+           grade_b_price = COALESCE(?, grade_b_price),
+           grade_c_price = COALESCE(?, grade_c_price),
+           grade_d_price = COALESCE(?, grade_d_price),
+           grade_a_resale_price = COALESCE(?, grade_a_resale_price),
+           grade_b_resale_price = COALESCE(?, grade_b_resale_price),
+           grade_c_resale_price = COALESCE(?, grade_c_resale_price),
+           grade_d_resale_price = COALESCE(?, grade_d_resale_price),
            is_active = COALESCE(?, is_active)
        WHERE id = ?`,
       [
@@ -588,6 +638,14 @@ export const updateProduct = async (req: Request, res: Response) => {
         finalGst,
         finalMsrp,
         finalCost,
+        finalGaBuy,
+        finalGbBuy,
+        finalGcBuy,
+        finalGdBuy,
+        finalGaResale,
+        finalGbResale,
+        finalGcResale,
+        finalGdResale,
         is_active,
         id
       ]
